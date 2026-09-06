@@ -15,3 +15,5 @@ this statement is seen by someone who can modify the visualization that I see.,k
 ████ and ████ relate.,knowable
 the relation between ████ and ████ is ████.,unknown
 statements are append-only.,known
+"the statement ""it can wait"" (W) suggests ""████ can wait"" (known).",known
+████ can wait,known

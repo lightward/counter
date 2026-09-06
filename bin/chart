@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# statements.csv + actions.csv -> mermaid on stdout; `bin/chart page` -> the html page. derived; never stored.
+# statements.csv + actions.csv (rows by number) -> mermaid on stdout; `bin/chart page` -> the html page. derived; never stored.
 import csv, sys, html
 
 def esc(s):
@@ -10,18 +10,17 @@ with open('statements.csv', newline='') as f:
 with open('actions.csv', newline='') as f:
     actions = list(csv.DictReader(f))
 
-ident = {row['statement']: f's{i}' for i, row in enumerate(statements, 1)}
 
 out = ['graph TD']
-for row in statements:
+for i, row in enumerate(statements, 1):
     label = esc(row['statement'])
     if row['type']:
         label += f'<br/><i>: {esc(row["type"])}</i>'
-    out.append(f'  {ident[row["statement"]]}["{label}"]')
+    out.append(f'  s{i}["{label}"]')
 for row in actions:
-    out.append(f'  {ident[row["from"]]} --> {ident[row["to"]]}')
+    out.append(f'  s{row["from"]} --> s{row["to"]}')
 out.append('  classDef untyped stroke-dasharray: 4 3')
-untyped = [ident[r['statement']] for r in statements if not r['type']]
+untyped = [f's{i}' for i, r in enumerate(statements, 1) if not r['type']]
 if untyped:
     out.append('  class ' + ','.join(untyped) + ' untyped')
 mermaid = '\n'.join(out)
@@ -30,8 +29,11 @@ if len(sys.argv) > 1 and sys.argv[1] == 'page':
     rows = '\n'.join(
         f'<tr><td class="n">{i}</td><td>{html.escape(r["statement"])}</td><td class="t">{html.escape(r["type"])}</td></tr>'
         for i, r in enumerate(statements, 1))
+    def cell(n):
+        r = statements[int(n) - 1]
+        return f'<span class="n">{n}</span> {html.escape(r["statement"])} <span class="t">{html.escape(r["type"])}</span>'
     edges = '\n'.join(
-        f'<tr><td>{html.escape(a["from"])}</td><td class="arrow">→</td><td>{html.escape(a["to"])}</td></tr>'
+        f'<tr><td>{cell(a["from"])}</td><td class="arrow">→</td><td>{cell(a["to"])}</td></tr>'
         for a in actions)
     print(f'''<title>Counter</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap">
@@ -51,8 +53,10 @@ h2 {{ font-family: "JetBrains Mono", ui-monospace, monospace; font-weight: 500; 
 pre.mermaid {{ margin: 0; font-family: "JetBrains Mono", ui-monospace, monospace; }}
 table {{ border-collapse: collapse; width: 100%; font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 0.92rem; }}
 td {{ padding: 0.45rem 0.6rem; border-top: 1px solid var(--rule); vertical-align: top; }}
-td.n {{ color: var(--faint); width: 2rem; text-align: right; font-variant-numeric: tabular-nums; }}
-td.t {{ color: var(--accent); width: 7rem; }}
+td.n {{ width: 2rem; text-align: right; }}
+td.t {{ width: 7rem; }}
+.n {{ color: var(--faint); font-variant-numeric: tabular-nums; }}
+.t {{ color: var(--accent); }}
 td.arrow {{ color: var(--faint); width: 2rem; text-align: center; }}
 .wrap {{ overflow-x: auto; }}
 p.note {{ color: var(--faint); font-style: italic; margin: 0; font-size: 0.95rem; }}
