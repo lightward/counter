@@ -13,6 +13,8 @@
 -- the observer tree, ancestry, lineage, meet, grade, and descend are lifted from foam's chrysalis
 -- schema (git -C ../foam show chrysalis:chrysalis/chrysalis/schema.sql), with names added.
 
+SET client_min_messages TO warning;
+
 CREATE SCHEMA IF NOT EXISTS counter;
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
@@ -161,8 +163,10 @@ CREATE TABLE IF NOT EXISTS counter.charge (
   candidate_fp text NOT NULL,
   piece        text NOT NULL,
   verdict      text NOT NULL CHECK (verdict IN ('seated', 'held')),
-  ms           int  NOT NULL DEFAULT 0
+  ms           int  NOT NULL DEFAULT 0,
+  body         text NOT NULL DEFAULT ''
 );
+ALTER TABLE counter.charge ADD COLUMN IF NOT EXISTS body text NOT NULL DEFAULT '';
 CREATE INDEX IF NOT EXISTS counter_charge_memo ON counter.charge (prefix_fp, candidate_fp);
 
 CREATE OR REPLACE FUNCTION counter.memo(prefix text, candidate text) RETURNS text LANGUAGE sql STABLE AS
