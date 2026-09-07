@@ -21,7 +21,7 @@ shared, the workshop:
 
 - **charges**: every trial foam's compiler ran, keyed by the fingerprints of its inputs. a trial is deterministic, so the pair of fingerprints is a memo, not a memory. the compiler never reads it; the chair answers for it.
 - **pins**: artifacts anchored by fingerprint, so the means can float. identity is the license for every swap.
-- **pieces**: bodies rendered as shapes, once per scope.
+- **readings**: what the judge read from a file (the bodies as shapes, the lattice, the vocabulary), keyed by the fingerprint of everything the reading stands on.
 - **the observer tree**, with `meet` and `grade`: the seat two chairs share, and how deep.
 
 ## the verbs

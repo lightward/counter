@@ -181,15 +181,17 @@ CREATE TABLE IF NOT EXISTS counter.pin (
   fp       text NOT NULL
 );
 
--- a piece: a body in scope rendered as a shape, once per fingerprint of the scope
-CREATE TABLE IF NOT EXISTS counter.piece (
+-- a reading: what the judge read from a file (templates — the bodies as shapes; needs — the
+-- lattice; cites — the vocabulary), keyed by the fingerprint of everything the reading stands on.
+-- a reading is deterministic, so the chair answers for it
+CREATE TABLE IF NOT EXISTS counter.reading (
   id       bigserial PRIMARY KEY,
-  scope_fp text NOT NULL,
-  key      text NOT NULL,
-  exemplar text NOT NULL,
-  template text NOT NULL
+  observer uuid NOT NULL REFERENCES counter.observer (id),
+  kind     text NOT NULL,
+  fp       text NOT NULL,
+  body     text NOT NULL
 );
-CREATE INDEX IF NOT EXISTS counter_piece_scope ON counter.piece (scope_fp);
+CREATE INDEX IF NOT EXISTS counter_reading_fp ON counter.reading (fp);
 
 -- whose turn: the chairs at the table in the order they sat, the fold over the ledger
 CREATE OR REPLACE FUNCTION counter.whose_turn() RETURNS text LANGUAGE sql STABLE AS $$

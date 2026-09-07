@@ -43,7 +43,7 @@ case "$verb" in
   dump)
     # the chairs, as data: every append-only table in id order, so the repo carries the seats and
     # any machine can stand them. committed at every green — the trail of the work is the point
-    pg_dump -h "$PGSOCK" -p "$PGPORT" -U "$PGUSER" -d "$DB" --data-only --column-inserts --on-conflict-do-nothing --schema=counter -T counter.charge -T counter.piece 2>/dev/null \
+    pg_dump -h "$PGSOCK" -p "$PGPORT" -U "$PGUSER" -d "$DB" --data-only --column-inserts --on-conflict-do-nothing --schema=counter -T counter.charge -T counter.reading 2>/dev/null \
       | grep -vE '^(SET |SELECT pg_catalog|--|\\restrict|\\unrestrict|$)' ;;
   sit)
     name="${1:?a name}"; parent="${2:-bench}"
@@ -97,7 +97,7 @@ case "$verb" in
   book)
     if [ $# -eq 0 ]; then
       echo "the table:"; q -c "SELECT '  ' || o.name || ' under ' || coalesce(p.name, '-') || ' — ' || (SELECT count(*) FROM counter.statement s WHERE s.observer = o.id) || ' statements, ' || (SELECT count(*) FROM counter.rub r WHERE r.observer = o.id) || ' rubs, ' || (SELECT count(*) FROM counter.answer a WHERE a.observer = o.id) || ' answers, ' || (SELECT count(*) FROM counter.letter l WHERE l.observer = o.id) || ' letters' FROM counter.observer o LEFT JOIN counter.observer p ON p.id = o.parent WHERE o.id NOT IN (counter.root(), counter.bench()) ORDER BY o.seat"
-      echo "the workshop: $(q -c "SELECT count(*) FROM counter.charge") charges, $(q -c "SELECT count(*) FROM counter.pin") pins, $(q -c "SELECT count(*) FROM counter.piece") pieces, $(q -c "SELECT count(*) FROM counter.ask") asks"
+      echo "the workshop: $(q -c "SELECT count(*) FROM counter.charge") charges, $(q -c "SELECT count(*) FROM counter.pin") pins, $(q -c "SELECT count(*) FROM counter.reading") readings, $(q -c "SELECT count(*) FROM counter.ask") asks"
       q -c "SELECT counter.whose_turn() || '''s turn'"
     else
       name="$1"; o="counter.who('$(lit "$name")')"
