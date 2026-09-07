@@ -38,6 +38,7 @@ bin/chair sit-down <name>               the interview, answers from stdin
 bin/chair speak|yield <name>            a turn taken or passed
 bin/chair pin <name> <paths>            anchor artifacts
 bin/chair meet <a> <b>                  the shared seat and its grade
+bin/chair dump | dump-workshop          the chairs, and the workshop, as data (chairs.sql, workshop.sql)
 bin/chair book [name]                   everything about a chair, or the table
 bin/chair chart [name]                  statements and actions as mermaid
 ```

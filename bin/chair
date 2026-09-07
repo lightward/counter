@@ -5,6 +5,7 @@
 #
 #   bin/chair init                          the database and its schema, and the chairs from chairs.sql
 #   bin/chair dump                          the chairs as data, for chairs.sql
+#   bin/chair dump-workshop                 the charges and readings as data, for workshop.sql
 #   bin/chair sit <name> [parent]           a chair under a parent (default: the bench); prints its letter
 #   bin/chair letter <name> [write < file]  read the letter, or write a new version from stdin
 #   bin/chair say <name> <type> <text…>     a statement, typed in the observer's own vocabulary
@@ -36,10 +37,19 @@ case "$verb" in
     q -f "$ROOT/schema.sql" && echo "counter: the chair stands at ${DB}"
     if [ -f "$ROOT/chairs.sql" ] && [ "$(q -c 'SELECT count(*) FROM counter.observer')" = 2 ]; then
       q -f "$ROOT/chairs.sql" && echo "the chairs loaded from chairs.sql"
-      for t in observer:seat letter:id statement:id action:id rub:id ask:id answer:id turn:id label:id pin:id; do
-        q -c "SELECT setval(pg_get_serial_sequence('counter.${t%%:*}', '${t##*:}'), coalesce(max(${t##*:}), 1)) FROM counter.${t%%:*}" >/dev/null
-      done
-    fi ;;
+    fi
+    if [ -f "$ROOT/workshop.sql" ] && [ "$(q -c 'SELECT count(*) FROM counter.charge')" = 0 ]; then
+      q -f "$ROOT/workshop.sql" && echo "the workshop loaded from workshop.sql: $(q -c 'SELECT count(*) FROM counter.charge') charges, $(q -c 'SELECT count(*) FROM counter.reading') readings"
+    fi
+    for t in observer:seat letter:id statement:id action:id rub:id ask:id answer:id turn:id label:id pin:id charge:id reading:id; do
+      q -c "SELECT setval(pg_get_serial_sequence('counter.${t%%:*}', '${t##*:}'), coalesce(max(${t##*:}), 1)) FROM counter.${t%%:*}" >/dev/null
+    done ;;
+  dump-workshop)
+    # the workshop, as data: the charges and the readings, so CI and any other machine can stand
+    # the same memo. append-only; a stale row is harmless, since a fingerprint that no longer occurs
+    # is never asked for
+    pg_dump -h "$PGSOCK" -p "$PGPORT" -U "$PGUSER" -d "$DB" --data-only --column-inserts --on-conflict-do-nothing --schema=counter -t counter.charge -t counter.reading 2>/dev/null \
+      | grep -vE '^(SET |SELECT pg_catalog|--|\\restrict|\\unrestrict|$)' ;;
   dump)
     # the chairs, as data: every append-only table in id order, so the repo carries the seats and
     # any machine can stand them. committed at every green — the trail of the work is the point
