@@ -25,6 +25,7 @@
 #   bin/chair who < text                    which seat a sample sits deepest in
 #   bin/chair meet <a> <b>                  the seat two chairs share, and its grade
 #   bin/chair book [name]                   everything about a chair, or the table
+#   bin/chair page                          the table as one html page, site/index.html
 #   bin/chair chart [name]                  the statements and actions as mermaid
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -134,6 +135,10 @@ case "$verb" in
       echo "-- labels"; q -c "SELECT '  ' || name || ': ' || body FROM counter.label WHERE observer = ${o} ORDER BY id"
       echo "-- pins"; q -c "SELECT '  ' || path || ' ' || fp FROM counter.pin WHERE observer = ${o} ORDER BY id"
     fi ;;
+  page)
+    # the table as one html page (site/index.html): every seat's letter, interview, statements,
+    # rubs, labels; the workshop's counts. derived; never stored
+    mkdir -p "$ROOT/site"; python3 "$ROOT/bin/.page" > "$ROOT/site/index.html" && echo "site/index.html: $(wc -c < "$ROOT/site/index.html" | tr -d ' ') bytes" ;;
   chart)
     where=""; [ $# -gt 0 ] && where="WHERE observer = counter.who('$(lit "$1")')"
     echo "graph TD"

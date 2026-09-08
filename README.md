@@ -44,6 +44,7 @@ bin/chair who < text                    which seat a sample sits deepest in
 bin/chair dump | dump-workshop          the chairs, and the workshop, as data (chairs.sql, workshop.sql)
 bin/chair book [name]                   everything about a chair, or the table
 bin/chair chart [name]                  statements and actions as mermaid
+bin/chair page                          the table as one html page (site/, published at every push)
 ```
 
 ## the form it stands on
