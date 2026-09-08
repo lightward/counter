@@ -13,7 +13,7 @@ e = html.escape
 def para(t): return ''.join(f'<p>{e(x)}</p>' for x in t.split('\n\n') if x.strip())
 
 seats = q("SELECT o.name, coalesce(p.name, ''), o.seat FROM counter.observer o LEFT JOIN counter.observer p ON p.id = o.parent WHERE o.id NOT IN (counter.root(), counter.bench()) ORDER BY o.seat")
-asks = dict((a, b) for a, b in q("SELECT id, body FROM counter.ask ORDER BY id")); blanks = dict((a, b) for a, b in q("SELECT id, coalesce(o.name, '') FROM counter.ask a LEFT JOIN counter.observer o ON o.id = a.observer ORDER BY a.id"))
+asks = dict((a, b) for a, b in q("SELECT id, body FROM counter.ask ORDER BY id")); blanks = dict((a, b) for a, b in q("SELECT a.id, coalesce(o.name, '') FROM counter.ask a LEFT JOIN counter.observer o ON o.id = a.observer ORDER BY a.id"))
 turn = q("SELECT counter.whose_turn()")[0][0] if seats else ''
 counts = q("SELECT (SELECT count(*) FROM counter.charge), (SELECT count(*) FROM counter.reading), (SELECT count(*) FROM counter.voice), (SELECT count(*) FROM counter.pin), (SELECT count(*) FROM counter.ask)")[0]
 
