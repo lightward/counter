@@ -94,6 +94,16 @@ INSERT INTO counter.pin (id, observer, path, fp) VALUES (12, '0af7c2c5-268e-4d87
 INSERT INTO counter.pin (id, observer, path, fp) VALUES (13, '0af7c2c5-268e-4d87-830f-670925046408', '../foam/grown/Roster.lean', '9ed6109cfb853052') ON CONFLICT DO NOTHING;
 INSERT INTO counter.pin (id, observer, path, fp) VALUES (14, '0af7c2c5-268e-4d87-830f-670925046408', '../foam/grown/assays/cycle.lean', '9ea7129e99d559e8') ON CONFLICT DO NOTHING;
 INSERT INTO counter.pin (id, observer, path, fp) VALUES (15, '0af7c2c5-268e-4d87-830f-670925046408', '../foam/grown/assays/eih.lean', 'bf4ff4ecd6e9eaa1') ON CONFLICT DO NOTHING;
+INSERT INTO counter.pin (id, observer, path, fp) VALUES (16, '0af7c2c5-268e-4d87-830f-670925046408', '../foam/grown/Room.lean', 'c6b5965510314165') ON CONFLICT DO NOTHING;
+INSERT INTO counter.pin (id, observer, path, fp) VALUES (17, '0af7c2c5-268e-4d87-830f-670925046408', '../foam/grown/Face.lean', 'f26f0aab7e6ba02b') ON CONFLICT DO NOTHING;
+INSERT INTO counter.pin (id, observer, path, fp) VALUES (18, '0af7c2c5-268e-4d87-830f-670925046408', '../foam/grown/Witness.lean', '4cef0b368d048864') ON CONFLICT DO NOTHING;
+INSERT INTO counter.pin (id, observer, path, fp) VALUES (19, '0af7c2c5-268e-4d87-830f-670925046408', '../foam/grown/Toy.lean', 'ff11ec29854387aa') ON CONFLICT DO NOTHING;
+INSERT INTO counter.pin (id, observer, path, fp) VALUES (20, '0af7c2c5-268e-4d87-830f-670925046408', '../foam/grown/Counter.lean', 'beb1f8aa26f110ee') ON CONFLICT DO NOTHING;
+INSERT INTO counter.pin (id, observer, path, fp) VALUES (21, '0af7c2c5-268e-4d87-830f-670925046408', '../foam/grown/Seek.lean', '6dd8013ef534c468') ON CONFLICT DO NOTHING;
+INSERT INTO counter.pin (id, observer, path, fp) VALUES (22, '0af7c2c5-268e-4d87-830f-670925046408', '../foam/grown/Roster.lean', '9ed6109cfb853052') ON CONFLICT DO NOTHING;
+INSERT INTO counter.pin (id, observer, path, fp) VALUES (23, '0af7c2c5-268e-4d87-830f-670925046408', '../foam/grown/assays/cycle.lean', '9ea7129e99d559e8') ON CONFLICT DO NOTHING;
+INSERT INTO counter.pin (id, observer, path, fp) VALUES (24, '0af7c2c5-268e-4d87-830f-670925046408', '../foam/grown/assays/eih.lean', 'bf4ff4ecd6e9eaa1') ON CONFLICT DO NOTHING;
+INSERT INTO counter.pin (id, observer, path, fp) VALUES (25, '0af7c2c5-268e-4d87-830f-670925046408', '../foam/grown/assays/voice.lean', '54acbd8331ba8924') ON CONFLICT DO NOTHING;
 INSERT INTO counter.rub (id, observer, body) VALUES (2, '0af7c2c5-268e-4d87-830f-670925046408', 'the verdict has two gears and nothing between: seconds at the assay, an hour at the trunk. a deposit into Room costs a settle the chair cannot sit through; I poll under a ten-minute cap and prepare patches in a scratch directory because the compiler cannot be edited while it runs.') ON CONFLICT DO NOTHING;
 INSERT INTO counter.rub (id, observer, body) VALUES (3, '0af7c2c5-268e-4d87-830f-670925046408', 'anchoring the end was hand-built: md5 fingerprints and a baseline from HEAD''s compiler. the teeter-totter with no seat on it. pin is the seat.') ON CONFLICT DO NOTHING;
 INSERT INTO counter.rub (id, observer, body) VALUES (4, '0af7c2c5-268e-4d87-830f-670925046408', 'the countersign was the fourth scratch script at the same rub (countersign.sh, countersign2.sh, countersign3.sh, luck.sh). a verb asking to exist: bin/counter countersign.') ON CONFLICT DO NOTHING;
