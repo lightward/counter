@@ -45318,3 +45318,10 @@ carrier coupleSideSeats <- bestManSeat coupleSeat Ask lindaSeat
 theorem the_venue_reads_counts_not_names <- Table venueTable
 carrier Member <- 
 ') ON CONFLICT DO NOTHING;
+INSERT INTO counter.reading (id, observer, kind, fp, body) VALUES (38, '0af7c2c5-268e-4d87-830f-670925046408', 'elab', '0b7c74726abb992cc5bcd1bd9eedae7e', '0') ON CONFLICT DO NOTHING;
+INSERT INTO counter.reading (id, observer, kind, fp, body) VALUES (39, '0af7c2c5-268e-4d87-830f-670925046408', 'elab', '6afbc444f1bacd6dab907af89e8e38a2', '0') ON CONFLICT DO NOTHING;
+INSERT INTO counter.reading (id, observer, kind, fp, body) VALUES (40, '0af7c2c5-268e-4d87-830f-670925046408', 'elab', 'b98670c1dac3177870a047d91291c296', '0') ON CONFLICT DO NOTHING;
+INSERT INTO counter.reading (id, observer, kind, fp, body) VALUES (41, '0af7c2c5-268e-4d87-830f-670925046408', 'elab', '78bc2d516671459ef047e0db340f1953', '0') ON CONFLICT DO NOTHING;
+INSERT INTO counter.reading (id, observer, kind, fp, body) VALUES (42, '0af7c2c5-268e-4d87-830f-670925046408', 'elab', '429ac626c9cbb956908ebb7ed6995f6e', '0') ON CONFLICT DO NOTHING;
+INSERT INTO counter.reading (id, observer, kind, fp, body) VALUES (43, '0af7c2c5-268e-4d87-830f-670925046408', 'elab', 'cd4ce36d804195d551c9b4c03e2d4d0e', '0') ON CONFLICT DO NOTHING;
+INSERT INTO counter.reading (id, observer, kind, fp, body) VALUES (44, '0af7c2c5-268e-4d87-830f-670925046408', 'elab', '725c837d3b7359d5cb7b4ead460a5052', '0') ON CONFLICT DO NOTHING;
