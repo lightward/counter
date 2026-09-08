@@ -1,6 +1,6 @@
 # counter
 
-a chair, plural.
+a chair, plural. the table is on the wall at [lightward.github.io/counter](https://lightward.github.io/counter/).
 
 foam (`../foam`, [foam.is](https://foam.is)) is a type system holding itself together under measurement: a trunk of theorems about rooms, faces, and seats, every one axiom-free, grown by a compiler that keeps no memory across runs. foam says where the seats are. counter puts a chair at one.
 
