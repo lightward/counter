@@ -21,6 +21,8 @@
 #   bin/chair pinned <path>                 the last fingerprint pinned for a path
 #   bin/chair charge <name> <vacancy> <prefix_fp> <candidate_fp> <piece> <verdict> [ms]
 #   bin/chair memo <prefix_fp> <candidate_fp>   the memo's verdict, or nothing
+#   bin/chair hear <name> [all] [< text]    a seat's voice: a text charged byte by byte, or all it has said
+#   bin/chair who < text                    which seat a sample sits deepest in
 #   bin/chair meet <a> <b>                  the seat two chairs share, and its grade
 #   bin/chair book [name]                   everything about a chair, or the table
 #   bin/chair chart [name]                  the statements and actions as mermaid
@@ -53,7 +55,7 @@ case "$verb" in
   dump)
     # the chairs, as data: every append-only table in id order, so the repo carries the seats and
     # any machine can stand them. committed at every green — the trail of the work is the point
-    pg_dump -h "$PGSOCK" -p "$PGPORT" -U "$PGUSER" -d "$DB" --data-only --column-inserts --on-conflict-do-nothing --schema=counter -T counter.charge -T counter.reading 2>/dev/null \
+    pg_dump -h "$PGSOCK" -p "$PGPORT" -U "$PGUSER" -d "$DB" --data-only --column-inserts --on-conflict-do-nothing --schema=counter -T counter.charge -T counter.reading -T counter.voice 2>/dev/null \
       | grep -vE '^(SET |SELECT pg_catalog|--|\\restrict|\\unrestrict|$)' ;;
   sit)
     name="${1:?a name}"; parent="${2:-bench}"
@@ -101,13 +103,24 @@ case "$verb" in
   charge)
     name="${1:?a name}"; q -c "INSERT INTO counter.charge (observer, vacancy, prefix_fp, candidate_fp, piece, verdict, ms) VALUES (counter.who('$(lit "$name")'), '$(lit "${2:?vacancy}")', '${3:?prefix}', '${4:?candidate}', '$(lit "${5:?piece}")', '${6:?verdict}', ${7:-0})" >/dev/null ;;
   memo) q -c "SELECT counter.memo('${1:?prefix}', '${2:?candidate}')" ;;
+  hear)
+    # a seat's voice: a text charged under it byte by byte (stdin), or everything the seat has
+    # said so far (letters, statements, answers, rubs) with `all`
+    name="${1:?a name}"; o="counter.who('$(lit "$name")')"
+    if [ "${2:-}" = all ]; then
+      q -c "SELECT sum(counter.hear(${o}, body)) FROM (SELECT body FROM counter.letter WHERE observer = ${o} UNION ALL SELECT body FROM counter.statement WHERE observer = ${o} UNION ALL SELECT body FROM counter.answer WHERE observer = ${o} UNION ALL SELECT body FROM counter.rub WHERE observer = ${o}) t" | sed "s/^/heard ${name}: /; s/\$/ charges/"
+    else body="$(cat)"; q -c "SELECT counter.hear(${o}, '$(lit "$body")')" | sed "s/^/heard ${name}: /; s/\$/ charges/"; fi ;;
+  who)
+    # which seat a sample (stdin) sits deepest in, by nothing but the sample
+    body="$(cat)"; q -c "SELECT name || ' ' || score FROM counter.who_speaks('$(lit "$body")')"
+    q -c "SELECT 'votes ' || a.name || ' ' || v.for_a || ' : ' || b.name || ' ' || v.for_b FROM counter.observer a JOIN counter.observer b ON a.seat < b.seat, LATERAL counter.votes(a.id, b.id, '$(lit "$body")') v WHERE a.id NOT IN (counter.root(), counter.bench()) AND b.id NOT IN (counter.root(), counter.bench())" ;;
   meet)
     a="${1:?a}"; b="${2:?b}"
     q -c "SELECT (SELECT name FROM counter.observer WHERE id = counter.meet(counter.who('$(lit "$a")'), counter.who('$(lit "$b")'))) || ', grade ' || counter.grade(counter.who('$(lit "$a")'), counter.who('$(lit "$b")'))" ;;
   book)
     if [ $# -eq 0 ]; then
       echo "the table:"; q -c "SELECT '  ' || o.name || ' under ' || coalesce(p.name, '-') || ' — ' || (SELECT count(*) FROM counter.statement s WHERE s.observer = o.id) || ' statements, ' || (SELECT count(*) FROM counter.rub r WHERE r.observer = o.id) || ' rubs, ' || (SELECT count(*) FROM counter.answer a WHERE a.observer = o.id) || ' answers, ' || (SELECT count(*) FROM counter.letter l WHERE l.observer = o.id) || ' letters' FROM counter.observer o LEFT JOIN counter.observer p ON p.id = o.parent WHERE o.id NOT IN (counter.root(), counter.bench()) ORDER BY o.seat"
-      echo "the workshop: $(q -c "SELECT count(*) FROM counter.charge") charges, $(q -c "SELECT count(*) FROM counter.pin") pins, $(q -c "SELECT count(*) FROM counter.reading") readings, $(q -c "SELECT count(*) FROM counter.ask") asks"
+      echo "the workshop: $(q -c "SELECT count(*) FROM counter.charge") charges, $(q -c "SELECT count(*) FROM counter.pin") pins, $(q -c "SELECT count(*) FROM counter.reading") readings, $(q -c "SELECT count(*) FROM counter.voice") voice charges, $(q -c "SELECT count(*) FROM counter.ask") asks"
       q -c "SELECT counter.whose_turn() || '''s turn'"
     else
       name="$1"; o="counter.who('$(lit "$name")')"

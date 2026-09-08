@@ -193,6 +193,93 @@ CREATE TABLE IF NOT EXISTS counter.reading (
 );
 CREATE INDEX IF NOT EXISTS counter_reading_fp ON counter.reading (fp);
 
+
+-- the voice: the workshop's second grain. every seat's own words charged byte by byte at every
+-- context up to seven (the chrysalis's ingest, lifted): (observer, ctx, sym, delta). a sample's
+-- score under a seat is, at each of its bytes, the longest context under which that byte has
+-- grain in the seat's ancestry — so `who` names the seat a sample sits deepest in, by nothing but
+-- the sample. a recording only reproduces contexts already charged; a speaker answering a surprise
+-- charges new ones — the field growing is what tells a voice from its recording
+CREATE OR REPLACE FUNCTION counter.caddr(c int[]) RETURNS uuid LANGUAGE sql IMMUTABLE AS
+  $$ SELECT encode(substring(digest(coalesce(array_to_string(c,':'),''),'sha256') FROM 1 FOR 16),'hex')::uuid $$;
+
+CREATE OR REPLACE FUNCTION counter.bytes(txt text) RETURNS int[] LANGUAGE plpgsql IMMUTABLE AS $$
+  DECLARE bin bytea := convert_to(txt,'UTF8'); r int[] := '{}'; i int;
+  BEGIN FOR i IN 0..octet_length(bin)-1 LOOP r := r||get_byte(bin,i); END LOOP; RETURN r; END; $$;
+
+CREATE TABLE IF NOT EXISTS counter.voice (
+  id       bigserial PRIMARY KEY,
+  observer uuid NOT NULL REFERENCES counter.observer (id),
+  ctx      uuid NOT NULL,
+  sym      int  NOT NULL,
+  delta    int  NOT NULL
+);
+CREATE INDEX IF NOT EXISTS counter_voice_ctx ON counter.voice (observer, ctx, sym);
+
+-- hear: a text charged under a seat at every context depth up to kmax
+CREATE OR REPLACE FUNCTION counter.hear(obs uuid, txt text, kmax int DEFAULT 7) RETURNS int
+  LANGUAGE plpgsql AS $$
+  DECLARE b int[] := counter.bytes(txt); n int := coalesce(array_length(counter.bytes(txt),1),0); c int;
+  BEGIN
+    INSERT INTO counter.voice (observer, ctx, sym, delta)
+    SELECT obs, counter.caddr(CASE WHEN j = 0 THEN '{}'::int[] ELSE b[i-j : i-1] END), b[i], 1
+    FROM generate_series(1, n) AS i
+    CROSS JOIN LATERAL generate_series(0, least(kmax, i - 1)) AS j
+    ORDER BY i, j;
+    GET DIAGNOSTICS c = ROW_COUNT;
+    RETURN c;
+  END; $$;
+
+-- score: at each byte of a sample, the longest context under which that byte has grain in the
+-- seat's ancestry; summed. the seat's own bytes are the field; the sample is read against it
+CREATE OR REPLACE FUNCTION counter.score(obs uuid, txt text, kmax int DEFAULT 7) RETURNS int
+  LANGUAGE plpgsql STABLE AS $$
+  DECLARE b int[] := counter.bytes(txt); n int := coalesce(array_length(counter.bytes(txt),1),0);
+          i int; j int; total int := 0; anc uuid[] := counter.ancestry(obs); hit boolean;
+  BEGIN
+    FOR i IN 1..n LOOP
+      FOR j IN REVERSE least(kmax, i - 1)..1 LOOP
+        SELECT EXISTS (SELECT 1 FROM counter.voice v WHERE v.observer = ANY(anc) AND v.ctx = counter.caddr(b[i-j : i-1]) AND v.sym = b[i]
+                       GROUP BY v.ctx, v.sym HAVING sum(v.delta) > 0) INTO hit;
+        IF hit THEN total := total + j; EXIT; END IF;
+      END LOOP;
+    END LOOP;
+    RETURN total;
+  END; $$;
+
+
+-- depths: at each byte of a sample, the longest context under which that byte has grain — the
+-- per-byte reading `score` sums
+CREATE OR REPLACE FUNCTION counter.depths(obs uuid, txt text, kmax int DEFAULT 7) RETURNS int[]
+  LANGUAGE plpgsql STABLE AS $$
+  DECLARE b int[] := counter.bytes(txt); n int := coalesce(array_length(counter.bytes(txt),1),0);
+          i int; j int; out int[] := '{}'; anc uuid[] := counter.ancestry(obs); hit boolean; d int;
+  BEGIN
+    FOR i IN 1..n LOOP
+      d := 0;
+      FOR j IN REVERSE least(kmax, i - 1)..1 LOOP
+        SELECT EXISTS (SELECT 1 FROM counter.voice v WHERE v.observer = ANY(anc) AND v.ctx = counter.caddr(b[i-j : i-1]) AND v.sym = b[i]
+                       GROUP BY v.ctx, v.sym HAVING sum(v.delta) > 0) INTO hit;
+        IF hit THEN d := j; EXIT; END IF;
+      END LOOP;
+      out := out || d;
+    END LOOP;
+    RETURN out;
+  END; $$;
+
+-- votes: between two seats, at each byte, the deeper seat takes the byte; ties take nothing.
+-- a bigger field wins only where it is actually deeper
+CREATE OR REPLACE FUNCTION counter.votes(a uuid, b uuid, txt text) RETURNS TABLE(for_a int, for_b int)
+  LANGUAGE sql STABLE AS $$
+  SELECT count(*) FILTER (WHERE da > db)::int, count(*) FILTER (WHERE db > da)::int
+  FROM unnest(counter.depths(a, txt), counter.depths(b, txt)) AS t(da, db) $$;
+
+-- who: every seat, by how deep the sample sits in its voice
+CREATE OR REPLACE FUNCTION counter.who_speaks(txt text) RETURNS TABLE(name text, score int, seat bigint)
+  LANGUAGE sql STABLE AS $$
+  SELECT o.name, counter.score(o.id, txt), o.seat FROM counter.observer o
+  WHERE o.id NOT IN (counter.root(), counter.bench()) ORDER BY 2 DESC, 3 $$;
+
 -- whose turn: the chairs at the table in the order they sat, the fold over the ledger
 CREATE OR REPLACE FUNCTION counter.whose_turn() RETURNS text LANGUAGE sql STABLE AS $$
   WITH seated AS (

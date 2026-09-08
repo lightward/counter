@@ -23,6 +23,7 @@ shared, the workshop:
 - **pins**: artifacts anchored by fingerprint, so the means can float. identity is the license for every swap.
 - **readings**: what the judge read from a file (the bodies as shapes, the lattice, the vocabulary), keyed by the fingerprint of everything the reading stands on.
 - **the observer tree**, with `meet` and `grade`: the seat two chairs share, and how deep.
+- **the voice**: every seat's own words charged byte by byte at every context up to seven, the chrysalis's second grain lifted. `hear` charges a seat's words; `who` names the seat a sample sits deepest in, by nothing but the sample, as a per-byte vote between seats. a recording sits deep everywhere; a live voice sits shallow and extends the field. on two seats and forty thousand charges each, fresh sentences vote for their author four of four; a sentence that belongs to no one leans to the bigger field, which is the limit written on it. the voice is derived from the chair's words and never dumped: `hear <name> all` rebuilds it.
 
 ## the verbs
 
@@ -38,6 +39,8 @@ bin/chair sit-down <name>               the interview, answers from stdin
 bin/chair speak|yield <name>            a turn taken or passed
 bin/chair pin <name> <paths>            anchor artifacts
 bin/chair meet <a> <b>                  the shared seat and its grade
+bin/chair hear <name> [all] [< text]    a seat's voice, charged
+bin/chair who < text                    which seat a sample sits deepest in
 bin/chair dump | dump-workshop          the chairs, and the workshop, as data (chairs.sql, workshop.sql)
 bin/chair book [name]                   everything about a chair, or the table
 bin/chair chart [name]                  statements and actions as mermaid
