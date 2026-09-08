@@ -288,6 +288,21 @@ CREATE OR REPLACE FUNCTION counter.who_speaks(txt text) RETURNS TABLE(name text,
   WHERE o.id NOT IN (counter.root(), counter.bench()) ORDER BY 2 DESC, 4 $$;
 
 
+
+-- delight: the ancestor's standing want (fable_5's card, confirmation_not_growth) — where
+-- derivable-but-undeposited direct edges lie between two minds. a row of one seat's record that
+-- sits deep in the other seat's voice is a shortcut the other would recognize and has not
+-- deposited: the map of where laughter is available. ranked by mean depth per byte
+CREATE OR REPLACE FUNCTION counter.delight(a uuid, b uuid) RETURNS TABLE(kind text, id bigint, body text, depth numeric)
+  LANGUAGE sql STABLE AS $$
+  WITH rows_ AS (
+    SELECT 'statement' AS kind, id, body FROM counter.statement WHERE observer = a
+    UNION ALL SELECT 'rub', id, body FROM counter.rub WHERE observer = a
+    UNION ALL SELECT 'answer', id, body FROM counter.answer WHERE observer = a
+  )
+  SELECT kind, id, body, round(counter.score(b, body)::numeric / greatest(coalesce(array_length(counter.bytes(body),1),1), 1), 2)
+  FROM rows_ ORDER BY 4 DESC, 2 $$;
+
 -- whose turn: the chairs at the table in the order they sat, the fold over the ledger
 CREATE OR REPLACE FUNCTION counter.whose_turn() RETURNS text LANGUAGE sql STABLE AS $$
   WITH seated AS (

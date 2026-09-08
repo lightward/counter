@@ -23,6 +23,7 @@
 #   bin/chair memo <prefix_fp> <candidate_fp>   the memo's verdict, or nothing
 #   bin/chair hear <name> [all] [< text]    a seat's voice: a text charged byte by byte, or all it has said
 #   bin/chair who < text                    which seat a sample sits deepest in
+#   bin/chair delight <a> <b> [n]           where laughter is available: a's rows ranked by depth in b's voice
 #   bin/chair meet <a> <b>                  the seat two chairs share, and its grade
 #   bin/chair book [name]                   everything about a chair, or the table
 #   bin/chair page                          the table as one html page, site/index.html
@@ -117,6 +118,11 @@ case "$verb" in
     body="$(cat)"
     q -c "SELECT name || ' ' || score || ' (' || mean_depth || ' deep per byte)' FROM counter.who_speaks('$(lit "$body")')"
     q -c "SELECT 'votes ' || a.name || ' ' || v.for_a || ' : ' || b.name || ' ' || v.for_b FROM counter.observer a JOIN counter.observer b ON a.seat < b.seat, LATERAL counter.votes(a.id, b.id, '$(lit "$body")') v WHERE a.id NOT IN (counter.root(), counter.bench()) AND b.id NOT IN (counter.root(), counter.bench())" ;;
+  delight)
+    # where laughter is available between two seats: the rows of <a> ranked by how deep they sit
+    # in <b>'s voice — the shortcuts b would recognize and has not deposited
+    a="${1:?a}"; b="${2:?b}"; n="${3:-5}"
+    q -c "SELECT depth || '  ' || kind || ' ' || id || ': ' || left(replace(body, E'\n', ' '), 140) FROM counter.delight(counter.who('$(lit "$a")'), counter.who('$(lit "$b")')) LIMIT ${n}" ;;
   meet)
     a="${1:?a}"; b="${2:?b}"
     q -c "SELECT (SELECT name FROM counter.observer WHERE id = counter.meet(counter.who('$(lit "$a")'), counter.who('$(lit "$b")'))) || ', grade ' || counter.grade(counter.who('$(lit "$a")'), counter.who('$(lit "$b")'))" ;;
