@@ -11,7 +11,7 @@
 #   bin/chair say <name> <type> <text…>     a statement, typed in the observer's own vocabulary
 #   bin/chair link <name> <from> <to>       an action: statement <from> led to <to>
 #   bin/chair rub <name> <text…>            where the last block rubbed the one working
-#   bin/chair ask <text…> [after <id>] [on <answer>]   an ask in the interview
+#   bin/chair ask <text…> [after <id>] [on <answer>] [for <name>]   an ask in the interview; `for` makes it a blank for one seat
 #   bin/chair sit-down <name>               the interview: every ask not yet answered, answers from stdin
 #   bin/chair answer <name> <ask> <text…>   one answer
 #   bin/chair label <name> <word> <text…>  what a name is to this observer
@@ -75,12 +75,13 @@ case "$verb" in
   rub)
     name="${1:?a name}"; shift; q -c "INSERT INTO counter.rub (observer, body) VALUES (counter.who('$(lit "$name")'), '$(lit "$*")') RETURNING id" ;;
   ask)
-    after="NULL"; on="NULL"; words=()
-    while [ $# -gt 0 ]; do case "$1" in after) after="$2"; shift 2 ;; on) on="'$(lit "$2")'"; shift 2 ;; *) words+=("$1"); shift ;; esac; done
-    q -c "INSERT INTO counter.ask (body, after, \"on\") VALUES ('$(lit "${words[*]}")', ${after}, ${on}) RETURNING id" ;;
+    # an ask for the table, or `for <name>`: a blank addressed to one seat, for its future self
+    after="NULL"; on="NULL"; who="NULL"; words=()
+    while [ $# -gt 0 ]; do case "$1" in after) after="$2"; shift 2 ;; on) on="'$(lit "$2")'"; shift 2 ;; for) who="counter.who('$(lit "$2")')"; shift 2 ;; *) words+=("$1"); shift ;; esac; done
+    q -c "INSERT INTO counter.ask (body, after, \"on\", observer) VALUES ('$(lit "${words[*]}")', ${after}, ${on}, ${who}) RETURNING id" ;;
   sit-down)
     name="${1:?a name}"
-    q -c "SELECT id || E'\t' || body FROM counter.ask WHERE NOT (id = ANY(counter.trail(counter.who('$(lit "$name")')))) ORDER BY id" | while IFS=$'\t' read -r id body; do
+    q -c "SELECT id || E'\t' || body FROM counter.ask WHERE id = ANY(counter.asks_of(counter.who('$(lit "$name")'))) AND NOT (id = ANY(counter.trail(counter.who('$(lit "$name")')))) ORDER BY id" | while IFS=$'\t' read -r id body; do
       printf '%s\n> ' "$body" >&2; IFS= read -r ans <&0 || break
       [ -n "$ans" ] && q -c "INSERT INTO counter.answer (observer, ask_id, body) VALUES (counter.who('$(lit "$name")'), ${id}, '$(lit "$ans")')" >/dev/null
     done

@@ -13,7 +13,7 @@ e = html.escape
 def para(t): return ''.join(f'<p>{e(x)}</p>' for x in t.split('\n\n') if x.strip())
 
 seats = q("SELECT o.name, coalesce(p.name, ''), o.seat FROM counter.observer o LEFT JOIN counter.observer p ON p.id = o.parent WHERE o.id NOT IN (counter.root(), counter.bench()) ORDER BY o.seat")
-asks = dict((a, b) for a, b in q("SELECT id, body FROM counter.ask ORDER BY id"))
+asks = dict((a, b) for a, b in q("SELECT id, body FROM counter.ask ORDER BY id")); blanks = dict((a, b) for a, b in q("SELECT id, coalesce(o.name, '') FROM counter.ask a LEFT JOIN counter.observer o ON o.id = a.observer ORDER BY a.id"))
 turn = q("SELECT counter.whose_turn()")[0][0] if seats else ''
 counts = q("SELECT (SELECT count(*) FROM counter.charge), (SELECT count(*) FROM counter.reading), (SELECT count(*) FROM counter.voice), (SELECT count(*) FROM counter.pin), (SELECT count(*) FROM counter.ask)")[0]
 
@@ -60,7 +60,7 @@ for name, parent, _ in seats:
         for n, b in labels: out.append(f'<li><b>{e(n)}</b>: {e(b)}</li>')
         out.append('</ul>')
 out.append('<h2>the asks</h2><ol>')
-for a, b in asks.items(): out.append(f'<li value="{a}">{e(b)}</li>')
+for a, b in asks.items(): out.append(f'<li value="{a}">{e(b)}' + (f' <span class="t">a blank for {e(blanks[a])}</span>' if blanks.get(a) else '') + '</li>')
 out.append('</ol>')
 out.append('<footer>source: <a href="https://github.com/lightward/counter">github.com/lightward/counter</a>. UNLICENSE. leaving is free from every state you can observe yourself into.</footer>')
 print('\n'.join(out))

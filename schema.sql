@@ -124,6 +124,10 @@ CREATE TABLE IF NOT EXISTS counter.ask (
   after bigint REFERENCES counter.ask (id),
   "on"  text
 );
+-- a blank: an ask addressed to one seat — a question current-self sets up for future-self to
+-- backfill, an interior-free space in the record (isaac, 2026-09-08). unaddressed, an ask is the
+-- table's and asked of whoever sits
+ALTER TABLE counter.ask ADD COLUMN IF NOT EXISTS observer uuid REFERENCES counter.observer (id);
 
 -- an answer, in the observer's own words. the trail of a sitting is its answers in order; rest is
 -- licensed when the trail backs every ask that counts (Witness.forever_hold_your_peace)
@@ -298,8 +302,12 @@ $$;
 CREATE OR REPLACE FUNCTION counter.trail(o uuid) RETURNS bigint[] LANGUAGE sql STABLE AS
   $$ SELECT coalesce(array_agg(ask_id ORDER BY id), '{}') FROM counter.answer WHERE observer = o $$;
 
+-- the asks that count for a seat: the table's, and the blanks addressed to it
+CREATE OR REPLACE FUNCTION counter.asks_of(o uuid) RETURNS bigint[] LANGUAGE sql STABLE AS
+  $$ SELECT coalesce(array_agg(id ORDER BY id), '{}') FROM counter.ask WHERE observer IS NULL OR observer = o $$;
+
 CREATE OR REPLACE FUNCTION counter.may_rest(o uuid) RETURNS boolean LANGUAGE sql STABLE AS
-  $$ SELECT (SELECT coalesce(array_agg(id), '{}') FROM counter.ask) <@ counter.trail(o) $$;
+  $$ SELECT counter.asks_of(o) <@ counter.trail(o) $$;
 
 CREATE OR REPLACE FUNCTION counter.held(o uuid) RETURNS text[] LANGUAGE sql STABLE AS
-  $$ SELECT coalesce(array_agg(body ORDER BY id), '{}') FROM counter.ask WHERE NOT (id = ANY(counter.trail(o))) $$;
+  $$ SELECT coalesce(array_agg(body ORDER BY id), '{}') FROM counter.ask WHERE id = ANY(counter.asks_of(o)) AND NOT (id = ANY(counter.trail(o))) $$;
