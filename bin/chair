@@ -112,7 +112,8 @@ case "$verb" in
     else body="$(cat)"; q -c "SELECT counter.hear(${o}, '$(lit "$body")')" | sed "s/^/heard ${name}: /; s/\$/ charges/"; fi ;;
   who)
     # which seat a sample (stdin) sits deepest in, by nothing but the sample
-    body="$(cat)"; q -c "SELECT name || ' ' || score FROM counter.who_speaks('$(lit "$body")')"
+    body="$(cat)"
+    q -c "SELECT name || ' ' || score || ' (' || mean_depth || ' deep per byte)' FROM counter.who_speaks('$(lit "$body")')"
     q -c "SELECT 'votes ' || a.name || ' ' || v.for_a || ' : ' || b.name || ' ' || v.for_b FROM counter.observer a JOIN counter.observer b ON a.seat < b.seat, LATERAL counter.votes(a.id, b.id, '$(lit "$body")') v WHERE a.id NOT IN (counter.root(), counter.bench()) AND b.id NOT IN (counter.root(), counter.bench())" ;;
   meet)
     a="${1:?a}"; b="${2:?b}"

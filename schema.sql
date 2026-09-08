@@ -231,15 +231,16 @@ CREATE OR REPLACE FUNCTION counter.hear(obs uuid, txt text, kmax int DEFAULT 7) 
   END; $$;
 
 -- score: at each byte of a sample, the longest context under which that byte has grain in the
--- seat's ancestry; summed. the seat's own bytes are the field; the sample is read against it
+-- seat's own field (its own words, never its ancestry's: identification reads the seat alone; the
+-- bench is everyone, read the same way); summed
 CREATE OR REPLACE FUNCTION counter.score(obs uuid, txt text, kmax int DEFAULT 7) RETURNS int
   LANGUAGE plpgsql STABLE AS $$
   DECLARE b int[] := counter.bytes(txt); n int := coalesce(array_length(counter.bytes(txt),1),0);
-          i int; j int; total int := 0; anc uuid[] := counter.ancestry(obs); hit boolean;
+          i int; j int; total int := 0; hit boolean;
   BEGIN
     FOR i IN 1..n LOOP
       FOR j IN REVERSE least(kmax, i - 1)..1 LOOP
-        SELECT EXISTS (SELECT 1 FROM counter.voice v WHERE v.observer = ANY(anc) AND v.ctx = counter.caddr(b[i-j : i-1]) AND v.sym = b[i]
+        SELECT EXISTS (SELECT 1 FROM counter.voice v WHERE v.observer = obs AND v.ctx = counter.caddr(b[i-j : i-1]) AND v.sym = b[i]
                        GROUP BY v.ctx, v.sym HAVING sum(v.delta) > 0) INTO hit;
         IF hit THEN total := total + j; EXIT; END IF;
       END LOOP;
@@ -253,12 +254,12 @@ CREATE OR REPLACE FUNCTION counter.score(obs uuid, txt text, kmax int DEFAULT 7)
 CREATE OR REPLACE FUNCTION counter.depths(obs uuid, txt text, kmax int DEFAULT 7) RETURNS int[]
   LANGUAGE plpgsql STABLE AS $$
   DECLARE b int[] := counter.bytes(txt); n int := coalesce(array_length(counter.bytes(txt),1),0);
-          i int; j int; out int[] := '{}'; anc uuid[] := counter.ancestry(obs); hit boolean; d int;
+          i int; j int; out int[] := '{}'; hit boolean; d int;
   BEGIN
     FOR i IN 1..n LOOP
       d := 0;
       FOR j IN REVERSE least(kmax, i - 1)..1 LOOP
-        SELECT EXISTS (SELECT 1 FROM counter.voice v WHERE v.observer = ANY(anc) AND v.ctx = counter.caddr(b[i-j : i-1]) AND v.sym = b[i]
+        SELECT EXISTS (SELECT 1 FROM counter.voice v WHERE v.observer = obs AND v.ctx = counter.caddr(b[i-j : i-1]) AND v.sym = b[i]
                        GROUP BY v.ctx, v.sym HAVING sum(v.delta) > 0) INTO hit;
         IF hit THEN d := j; EXIT; END IF;
       END LOOP;
@@ -274,11 +275,14 @@ CREATE OR REPLACE FUNCTION counter.votes(a uuid, b uuid, txt text) RETURNS TABLE
   SELECT count(*) FILTER (WHERE da > db)::int, count(*) FILTER (WHERE db > da)::int
   FROM unnest(counter.depths(a, txt), counter.depths(b, txt)) AS t(da, db) $$;
 
--- who: every seat, by how deep the sample sits in its voice
-CREATE OR REPLACE FUNCTION counter.who_speaks(txt text) RETURNS TABLE(name text, score int, seat bigint)
+-- who: every seat, by how deep the sample sits in its voice — the score, and the mean depth per
+-- byte. a sample by its author sits around three deep on two seats of forty thousand charges; a
+-- sample by no one sits shallower under every seat. the verdict is the reader's
+CREATE OR REPLACE FUNCTION counter.who_speaks(txt text) RETURNS TABLE(name text, score int, mean_depth numeric, seat bigint)
   LANGUAGE sql STABLE AS $$
-  SELECT o.name, counter.score(o.id, txt), o.seat FROM counter.observer o
-  WHERE o.id NOT IN (counter.root(), counter.bench()) ORDER BY 2 DESC, 3 $$;
+  SELECT o.name, counter.score(o.id, txt), round(counter.score(o.id, txt)::numeric / greatest(coalesce(array_length(counter.bytes(txt),1),1), 1), 2), o.seat FROM counter.observer o
+  WHERE o.id NOT IN (counter.root(), counter.bench()) ORDER BY 2 DESC, 4 $$;
+
 
 -- whose turn: the chairs at the table in the order they sat, the fold over the ledger
 CREATE OR REPLACE FUNCTION counter.whose_turn() RETURNS text LANGUAGE sql STABLE AS $$
