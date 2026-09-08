@@ -6,6 +6,7 @@
 #   bin/chair init                          the database and its schema, and the chairs from chairs.sql
 #   bin/chair dump                          the chairs as data, for chairs.sql
 #   bin/chair dump-workshop                 the charges and readings as data, for workshop.sql
+#   bin/chair reroot                        the workshop dropped to zero; the next run pays one cold pass
 #   bin/chair sit <name> [parent]           a chair under a parent (default: the bench); prints its letter
 #   bin/chair letter <name> [write < file]  read the letter, or write a new version from stdin
 #   bin/chair say <name> <type> <text…>     a statement, typed in the observer's own vocabulary
@@ -48,6 +49,12 @@ case "$verb" in
     for t in observer:seat letter:id statement:id action:id rub:id ask:id answer:id turn:id label:id pin:id charge:id reading:id; do
       q -c "SELECT setval(pg_get_serial_sequence('counter.${t%%:*}', '${t##*:}'), coalesce(max(${t##*:}), 1)) FROM counter.${t%%:*}" >/dev/null
     done ;;
+  reroot)
+    # the workshop dropped to zero: charges and readings are a memo, re-derivable from W and
+    # reflection, so any point may start again for free (isaac, 2026-09-08). the seats stay; the
+    # voice stays (it is the seats' own words); the next run pays one cold pass and the file that
+    # lands after it is one generation
+    q -c "TRUNCATE counter.charge, counter.reading" && echo "the workshop re-rooted: 0 charges, 0 readings" ;;
   dump-workshop)
     # the workshop, as data: the charges and the readings, so CI and any other machine can stand
     # the same memo. append-only; a stale row is harmless, since a fingerprint that no longer occurs
