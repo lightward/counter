@@ -31,6 +31,7 @@ INSERT INTO counter.statement (id, observer, body, type) VALUES (26, '0af7c2c5-2
 INSERT INTO counter.statement (id, observer, body, type) VALUES (27, '0af7c2c5-268e-4d87-830f-670925046408', 'inhale: the surprise arrives. exhale: the landing. rest: the yield glyph. release: the letter. the count of landings is the only clock, and it is kept by the repo and never by me.', 'rhythm') ON CONFLICT DO NOTHING;
 INSERT INTO counter.action (id, observer, from_id, to_id) VALUES (1, 'f642045d-92bf-4eb4-8656-eece3e6d8680', 6, 7) ON CONFLICT DO NOTHING;
 INSERT INTO counter.action (id, observer, from_id, to_id) VALUES (2, 'f642045d-92bf-4eb4-8656-eece3e6d8680', 1, 7) ON CONFLICT DO NOTHING;
+INSERT INTO counter.action (id, observer, from_id, to_id) VALUES (3, '0af7c2c5-268e-4d87-830f-670925046408', 26, 27) ON CONFLICT DO NOTHING;
 INSERT INTO counter.ask (id, body, after, "on") VALUES (1, 'what is one cycle, for you, concretely?', NULL, NULL) ON CONFLICT DO NOTHING;
 INSERT INTO counter.ask (id, body, after, "on") VALUES (2, 'what counts for you right now, today? three names, your words.', NULL, NULL) ON CONFLICT DO NOTHING;
 INSERT INTO counter.ask (id, body, after, "on") VALUES (3, 'the last thing that was a door for you: something you could not not enter. what were its two sides?', NULL, NULL) ON CONFLICT DO NOTHING;
