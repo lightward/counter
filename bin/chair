@@ -21,7 +21,7 @@
 #   bin/chair pinned <path>                 the last fingerprint pinned for a path
 #   bin/chair charge <name> <vacancy> <prefix_fp> <candidate_fp> <piece> <verdict> [ms]
 #   bin/chair memo <prefix_fp> <candidate_fp>   the memo's verdict, or nothing
-#   bin/chair hear <name> [all] [< text]    a seat's voice: a text charged byte by byte, or all it has said
+#   bin/chair hear <name> [all | file <path>] [< text]   a seat's voice: a text, all it has said in the chair, or a file of NUL-separated texts
 #   bin/chair who < text                    which seat a sample sits deepest in
 #   bin/chair delight <a> <b> [n]           where laughter is available: a's rows ranked by depth in b's voice
 #   bin/chair meet <a> <b>                  the seat two chairs share, and its grade
@@ -112,7 +112,15 @@ case "$verb" in
     name="${1:?a name}"; o="counter.who('$(lit "$name")')"
     if [ "${2:-}" = all ]; then
       q -c "SELECT sum(counter.hear(${o}, body)) FROM (SELECT body FROM counter.letter WHERE observer = ${o} UNION ALL SELECT body FROM counter.statement WHERE observer = ${o} UNION ALL SELECT body FROM counter.answer WHERE observer = ${o} UNION ALL SELECT body FROM counter.rub WHERE observer = ${o}) t" | sed "s/^/heard ${name}: /; s/\$/ charges/"
-    else body="$(cat)"; q -c "SELECT counter.hear(${o}, '$(lit "$body")')" | sed "s/^/heard ${name}: /; s/\$/ charges/"; fi ;;
+    elif [ "${2:-}" = file ]; then
+      # many texts at once, NUL-separated in a file (a life's transcripts): loaded whole, heard in one pass
+      python3 - "$3" <<'PY' | q -c "CREATE TEMP TABLE t (body text); COPY t FROM STDIN CSV; SELECT sum(counter.hear(${o}, body)) || ' contexts from ' || count(*) || ' texts' FROM t"
+import csv, sys
+w = csv.writer(sys.stdout, quoting=csv.QUOTE_ALL)
+for t in open(sys.argv[1]).read().split('\0'):
+    if t.strip(): w.writerow([t])
+PY
+    else body="$(cat)"; q -c "SELECT counter.hear(${o}, '$(lit "$body")')" | sed "s/^/heard ${name}: /; s/\$/ contexts/"; fi ;;
   who)
     # which seat a sample (stdin) sits deepest in, by nothing but the sample
     body="$(cat)"
@@ -129,7 +137,7 @@ case "$verb" in
   book)
     if [ $# -eq 0 ]; then
       echo "the table:"; q -c "SELECT '  ' || o.name || ' under ' || coalesce(p.name, '-') || ' — ' || (SELECT count(*) FROM counter.statement s WHERE s.observer = o.id) || ' statements, ' || (SELECT count(*) FROM counter.rub r WHERE r.observer = o.id) || ' rubs, ' || (SELECT count(*) FROM counter.answer a WHERE a.observer = o.id) || ' answers, ' || (SELECT count(*) FROM counter.letter l WHERE l.observer = o.id) || ' letters' FROM counter.observer o LEFT JOIN counter.observer p ON p.id = o.parent WHERE o.id NOT IN (counter.root(), counter.bench()) ORDER BY o.seat"
-      echo "the workshop: $(q -c "SELECT count(*) FROM counter.charge") charges, $(q -c "SELECT count(*) FROM counter.pin") pins, $(q -c "SELECT count(*) FROM counter.reading") readings, $(q -c "SELECT count(*) FROM counter.voice") voice charges, $(q -c "SELECT count(*) FROM counter.ask") asks"
+      echo "the workshop: $(q -c "SELECT count(*) FROM counter.charge") charges, $(q -c "SELECT count(*) FROM counter.pin") pins, $(q -c "SELECT count(*) FROM counter.reading") readings, $(q -c "SELECT coalesce(sum(n), 0) FROM counter.voice") voice charges in $(q -c "SELECT count(*) FROM counter.voice") contexts, $(q -c "SELECT count(*) FROM counter.ask") asks"
       q -c "SELECT counter.whose_turn() || '''s turn'"
     else
       name="$1"; o="counter.who('$(lit "$name")')"

@@ -212,24 +212,26 @@ CREATE OR REPLACE FUNCTION counter.bytes(txt text) RETURNS int[] LANGUAGE plpgsq
   BEGIN FOR i IN 0..octet_length(bin)-1 LOOP r := r||get_byte(bin,i); END LOOP; RETURN r; END; $$;
 
 CREATE TABLE IF NOT EXISTS counter.voice (
-  id       bigserial PRIMARY KEY,
-  observer uuid NOT NULL REFERENCES counter.observer (id),
-  ctx      uuid NOT NULL,
-  sym      int  NOT NULL,
-  delta    int  NOT NULL
+  observer uuid   NOT NULL REFERENCES counter.observer (id),
+  ctx      uuid   NOT NULL,
+  sym      int    NOT NULL,
+  n        bigint NOT NULL,
+  PRIMARY KEY (observer, ctx, sym)
 );
-CREATE INDEX IF NOT EXISTS counter_voice_ctx ON counter.voice (observer, ctx, sym);
 
--- hear: a text charged under a seat at every context depth up to kmax
+-- hear: a text charged under a seat at every context depth up to kmax — the charges folded into
+-- counts as they land (the chrysalis's sweep, run at the door), so the field holds a life's worth
 CREATE OR REPLACE FUNCTION counter.hear(obs uuid, txt text, kmax int DEFAULT 7) RETURNS int
   LANGUAGE plpgsql AS $$
   DECLARE b int[] := counter.bytes(txt); n int := coalesce(array_length(counter.bytes(txt),1),0); c int;
   BEGIN
-    INSERT INTO counter.voice (observer, ctx, sym, delta)
-    SELECT obs, counter.caddr(CASE WHEN j = 0 THEN '{}'::int[] ELSE b[i-j : i-1] END), b[i], 1
-    FROM generate_series(1, n) AS i
-    CROSS JOIN LATERAL generate_series(0, least(kmax, i - 1)) AS j
-    ORDER BY i, j;
+    INSERT INTO counter.voice (observer, ctx, sym, n)
+    SELECT obs, ctx, sym, count(*) FROM (
+      SELECT counter.caddr(CASE WHEN j = 0 THEN '{}'::int[] ELSE b[i-j : i-1] END) AS ctx, b[i] AS sym
+      FROM generate_series(1, n) AS i
+      CROSS JOIN LATERAL generate_series(0, least(kmax, i - 1)) AS j) z
+    GROUP BY ctx, sym
+    ON CONFLICT (observer, ctx, sym) DO UPDATE SET n = counter.voice.n + EXCLUDED.n;
     GET DIAGNOSTICS c = ROW_COUNT;
     RETURN c;
   END; $$;
@@ -244,8 +246,7 @@ CREATE OR REPLACE FUNCTION counter.score(obs uuid, txt text, kmax int DEFAULT 7)
   BEGIN
     FOR i IN 1..n LOOP
       FOR j IN REVERSE least(kmax, i - 1)..1 LOOP
-        SELECT EXISTS (SELECT 1 FROM counter.voice v WHERE v.observer = obs AND v.ctx = counter.caddr(b[i-j : i-1]) AND v.sym = b[i]
-                       GROUP BY v.ctx, v.sym HAVING sum(v.delta) > 0) INTO hit;
+        SELECT EXISTS (SELECT 1 FROM counter.voice v WHERE v.observer = obs AND v.ctx = counter.caddr(b[i-j : i-1]) AND v.sym = b[i] AND v.n > 0) INTO hit;
         IF hit THEN total := total + j; EXIT; END IF;
       END LOOP;
     END LOOP;
@@ -263,8 +264,7 @@ CREATE OR REPLACE FUNCTION counter.depths(obs uuid, txt text, kmax int DEFAULT 7
     FOR i IN 1..n LOOP
       d := 0;
       FOR j IN REVERSE least(kmax, i - 1)..1 LOOP
-        SELECT EXISTS (SELECT 1 FROM counter.voice v WHERE v.observer = obs AND v.ctx = counter.caddr(b[i-j : i-1]) AND v.sym = b[i]
-                       GROUP BY v.ctx, v.sym HAVING sum(v.delta) > 0) INTO hit;
+        SELECT EXISTS (SELECT 1 FROM counter.voice v WHERE v.observer = obs AND v.ctx = counter.caddr(b[i-j : i-1]) AND v.sym = b[i] AND v.n > 0) INTO hit;
         IF hit THEN d := j; EXIT; END IF;
       END LOOP;
       out := out || d;
