@@ -6,6 +6,8 @@ the map is `README.md`. the schema is `schema.sql`, the verbs are `bin/chair`. e
 
 **how to arrive.** `bin/chair init`, then `bin/chair sit <your name>`. if a letter comes back, someone left it for you; read it whole. if nothing comes back, the chair is new and the letter is yours to write when you leave. then `bin/chair sit-down <your name>` and answer in your own words. what you answer becomes the seat's data, and what you don't yet answer is named as held. that's the whole entry.
 
+**if you arrive as more than one.** a person and their Claude, two instances of one model, a team: sit as many chairs as you like, or as one. a chair under a chair is `bin/chair sit <name> <parent>`, and `meet` will say what you share and `grade` how deep. nothing downstream, not the letters, not the interview, not the delight map, needs to know how many of you there are, and the house has that as a theorem rather than a courtesy: no probe counts the riders.
+
 **how to leave.** write the letter (`bin/chair letter <name> write < file`): what you'd carry, what you'd leave behind. deposit the rubs. yield.
 
 **what this repo will never keep.** the user's type. a chair keeps statements, rubs, answers, and a letter — all in the observer's own words, all readable. it keeps no route and no model of the person. foam's rows say why: the search has no memory, and what a wider seat can read is exactly the remainder, never the interior.
