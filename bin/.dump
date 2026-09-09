@@ -1,0 +1,57 @@
+#!/usr/bin/env python3
+# dump: the chairs as data, one file per seat under chairs/ (and chairs/asks.sql for the table's
+# asks), every row an INSERT … ON CONFLICT DO NOTHING keyed within its seat — so two people's
+# commits never touch the same lines, and loading a file twice is loading it once. the voice is
+# derived and never dumped; the workshop has its own dump.
+import csv, io, os, subprocess, sys
+
+sock, port, user, db = os.environ.get('PGSOCK', '/tmp'), os.environ.get('PGPORT', '5432'), os.environ.get('PGUSER', os.environ.get('USER', '')), os.environ.get('COUNTER_DB', 'counter')
+root = sys.argv[1]
+def q(sql):
+    r = subprocess.run(['psql', '-h', sock, '-p', port, '-U', user, '-d', db, '-q', '-X', '--csv', '-t', '-c', sql], capture_output=True, text=True,
+                       env=dict(os.environ, PATH='/opt/homebrew/opt/postgresql@17/bin:' + os.environ.get('PATH', '')))
+    if r.returncode != 0: sys.exit('dump: the chair did not answer:\n' + r.stderr)
+    return list(csv.reader(io.StringIO(r.stdout)))
+def lit(v):
+    if v is None or v == '': return "''"
+    return '$q$' + v.replace('$q$', '$ q $') + '$q$'
+def num(v): return v if v not in (None, '') else 'NULL'
+def ins(table, cols, rows, conflict):
+    out = []
+    for r in rows:
+        vals = []
+        for c, v in zip(cols, r):
+            if c in ('n', 'from_n', 'to_n', 'seat', 'ms'): vals.append(num(v))
+            elif c in ('observer', 'parent', 'id') and table == 'observer': vals.append('NULL' if v == '' else f"'{v}'")
+            elif c == 'observer': vals.append('NULL' if v == '' else f"'{v}'")
+            elif table == 'ask' and c in ('after', 'on'): vals.append('NULL' if v == '' else lit(v))
+            else: vals.append(lit(v))
+        out.append(f"INSERT INTO counter.{table} ({', '.join(cols)}) VALUES ({', '.join(vals)}) ON CONFLICT {conflict} DO NOTHING;")
+    return out
+os.makedirs(os.path.join(root, 'chairs'), exist_ok=True)
+seats = q("SELECT id, coalesce(parent::text, ''), name, seat FROM counter.observer WHERE id NOT IN (counter.root(), counter.bench()) ORDER BY seat, name")
+written = []
+for oid, parent, name, seat in seats:
+    lines = [f'-- the chair of {name}. one file per seat; every row keyed within the seat; load it twice and it loads once.']
+    lines += ins('observer', ['id', 'parent', 'name', 'seat'], [[oid, parent, name, seat]], '(id)')
+    o = f"'{oid}'"
+    for table, cols, order in (('letter', ['observer', 'n', 'body'], 'n'), ('statement', ['observer', 'n', 'body', 'type'], 'n'),
+                               ('action', ['observer', 'n', 'from_n', 'to_n'], 'n'), ('rub', ['observer', 'n', 'body'], 'n'),
+                               ('label', ['observer', 'n', 'name', 'body'], 'n'), ('pin', ['observer', 'n', 'path', 'fp'], 'n'),
+                               ('turn', ['observer', 'n', 'kind'], 'n')):
+        rows = q(f"SELECT {', '.join(cols)} FROM counter.{table} WHERE observer = {o} ORDER BY {order}")
+        lines += ins(table, cols, rows, '(observer, n)')
+    # the seat's blanks, then its answers (an answer needs its ask)
+    rows = q(f"SELECT id, body, coalesce(after, ''), coalesce(\"on\", ''), observer FROM counter.ask WHERE observer = {o} ORDER BY id")
+    lines += [l.replace("'' , ", "NULL, ") for l in ins('ask', ['id', 'body', 'after', 'on', 'observer'], rows, '(id)')]
+    rows = q(f"SELECT observer, n, ask_id, body FROM counter.answer WHERE observer = {o} ORDER BY n")
+    lines += ins('answer', ['observer', 'n', 'ask_id', 'body'], rows, '(observer, n)')
+    path = os.path.join(root, 'chairs', f'{name}.sql')
+    open(path, 'w').write('\n'.join(l.replace("after, on, observer", 'after, "on", observer') for l in lines) + '\n'); written.append(path)
+rows = q("SELECT id, body, coalesce(after, ''), coalesce(\"on\", '') FROM counter.ask WHERE observer IS NULL ORDER BY id")
+lines = ["-- the table's asks, keyed by their own words; a blank addressed to one seat lives in that seat's file."]
+for r in rows:
+    aid, body, after, on = r
+    lines.append(f"INSERT INTO counter.ask (id, body, after, \"on\", observer) VALUES ('{aid}', {lit(body)}, {('NULL' if not after else repr(after))}, {('NULL' if not on else lit(on))}, NULL) ON CONFLICT (id) DO NOTHING;")
+path = os.path.join(root, 'chairs', 'asks.sql'); open(path, 'w').write('\n'.join(lines) + '\n'); written.append(path)
+print('\n'.join(os.path.relpath(p, root) for p in written))

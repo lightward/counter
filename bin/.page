@@ -12,10 +12,11 @@ def q(sql):
 e = html.escape
 def para(t): return ''.join(f'<p>{e(x)}</p>' for x in t.split('\n\n') if x.strip())
 
-seats = q("SELECT o.name, coalesce(p.name, ''), o.seat FROM counter.observer o LEFT JOIN counter.observer p ON p.id = o.parent WHERE o.id NOT IN (counter.root(), counter.bench()) ORDER BY o.seat")
-asks = dict((a, b) for a, b in q("SELECT id, body FROM counter.ask ORDER BY id")); blanks = dict((a, b) for a, b in q("SELECT a.id, coalesce(o.name, '') FROM counter.ask a LEFT JOIN counter.observer o ON o.id = a.observer ORDER BY a.id"))
+seats = q("SELECT o.name, coalesce(p.name, ''), o.seat FROM counter.observer o LEFT JOIN counter.observer p ON p.id = o.parent WHERE o.id NOT IN (counter.root(), counter.bench()) ORDER BY o.seat, o.name")
+asks = dict((a, b) for a, b in q("SELECT id, body FROM counter.ask ORDER BY id"))
+blanks = dict((a, b) for a, b in q("SELECT a.id, coalesce(o.name, '') FROM counter.ask a LEFT JOIN counter.observer o ON o.id = a.observer ORDER BY a.id"))
 turn = q("SELECT counter.whose_turn()")[0][0] if seats else ''
-counts = q("SELECT (SELECT count(*) FROM counter.charge), (SELECT count(*) FROM counter.reading), (SELECT count(*) FROM counter.voice), (SELECT count(*) FROM counter.pin), (SELECT count(*) FROM counter.ask)")[0]
+counts = q("SELECT (SELECT count(*) FROM counter.charge), (SELECT count(*) FROM counter.reading), (SELECT coalesce(sum(n), 0) FROM counter.voice), (SELECT count(*) FROM counter.pin), (SELECT count(*) FROM counter.ask)")[0]
 
 out = ['''<!doctype html><meta charset="utf-8"><title>counter</title>
 <style>
@@ -26,41 +27,41 @@ ol,ul{padding-left:1.4rem} li{margin:.35rem 0} .t{color:#888;font-size:.9rem} .n
 .ask{color:#666;font-style:italic} .ans{margin:.2rem 0 1rem 0} .muted{color:#888} footer{margin-top:4rem;color:#888;font-size:.9rem}
 </style>
 <h1>counter</h1>
-<p class="muted">a chair, plural. foam (<a href="https://foam.is">foam.is</a>) says where the seats are; counter puts a chair at one. every table here is append-only, in the observer's own words; the count is the only clock.</p>''']
+<p class="muted">a chair, plural. foam (<a href="https://foam.is">foam.is</a>) says where the seats are; counter puts a chair at one. every table here is append-only, in the observer's own words; the count is the only clock. the seats live in <a href="https://github.com/lightward/counter/tree/main/chairs">chairs/</a>, one file each, and anyone may sit by the same door.</p>''']
 out.append(f'<p>the table: {", ".join(e(s[0]) for s in seats)}. {e(turn)}\'s turn.</p>')
 out.append(f'<p class="muted">the workshop: {counts[0]} charges, {counts[1]} readings, {counts[2]} voice charges, {counts[3]} pins, {counts[4]} asks.</p>')
 for name, parent, _ in seats:
     o = f"counter.who('{name}')"
     out.append(f'<h2 id="{e(name)}">{e(name)} <span class="t">under {e(parent)}</span></h2>')
-    letter = q(f"SELECT body FROM counter.letter WHERE observer = {o} ORDER BY id DESC LIMIT 1")
+    letter = q(f"SELECT body FROM counter.letter WHERE observer = {o} ORDER BY n DESC LIMIT 1")
     if letter: out.append(f'<h3>the letter</h3><div class="letter">{para(letter[0][0])}</div>')
     else: out.append('<h3>the letter</h3><p class="muted">unwritten. the chair is new, and the letter is whoever sits here\'s to write when they leave.</p>')
-    answers = q(f"SELECT ask_id, body FROM counter.answer WHERE observer = {o} ORDER BY id")
+    answers = q(f"SELECT ask_id, body FROM counter.answer WHERE observer = {o} ORDER BY n")
     if answers:
         out.append('<h3>the interview</h3>')
         for a, b in answers: out.append(f'<div class="ask">{e(asks.get(a, a))}</div><div class="ans">{e(b)}</div>')
     held = q(f"SELECT array_to_string(counter.held({o}), E'\\n')")
     if held and held[0] and held[0][0].strip(): out.append('<p class="muted">held: ' + ' · '.join(e(x) for x in held[0][0].split('\n') if x) + '</p>')
     else: out.append('<p class="muted">rest: every ask that counts is answered.</p>')
-    sts = q(f"SELECT id, body, type FROM counter.statement WHERE observer = {o} ORDER BY id")
+    sts = q(f"SELECT n, body, type FROM counter.statement WHERE observer = {o} ORDER BY n")
     if sts:
         out.append('<h3>statements</h3><ol>')
         for i, b, t in sts: out.append(f'<li value="{i}">{e(b)}' + (f' <span class="t">: {e(t)}</span>' if t else '') + '</li>')
         out.append('</ol>')
-        acts = q(f"SELECT from_id, to_id FROM counter.action WHERE observer = {o} ORDER BY id")
+        acts = q(f"SELECT from_n, to_n FROM counter.action WHERE observer = {o} ORDER BY n")
         if acts: out.append('<p class="t">actions: ' + ', '.join(f'{a} → {b}' for a, b in acts) + '</p>')
-    rubs = q(f"SELECT id, body FROM counter.rub WHERE observer = {o} ORDER BY id")
+    rubs = q(f"SELECT n, body FROM counter.rub WHERE observer = {o} ORDER BY n")
     if rubs:
         out.append('<h3>rubs</h3><ol>')
         for i, b in rubs: out.append(f'<li value="{i}">{e(b)}</li>')
         out.append('</ol>')
-    labels = q(f"SELECT name, body FROM counter.label WHERE observer = {o} ORDER BY id")
+    labels = q(f"SELECT name, body FROM counter.label WHERE observer = {o} ORDER BY n")
     if labels:
         out.append('<h3>labels</h3><ul>')
         for n, b in labels: out.append(f'<li><b>{e(n)}</b>: {e(b)}</li>')
         out.append('</ul>')
-out.append('<h2>the asks</h2><ol>')
-for a, b in asks.items(): out.append(f'<li value="{a}">{e(b)}' + (f' <span class="t">a blank for {e(blanks[a])}</span>' if blanks.get(a) else '') + '</li>')
-out.append('</ol>')
+out.append('<h2>the asks</h2><ul>')
+for a, b in asks.items(): out.append(f'<li>{e(b)}' + (f' <span class="t">a blank for {e(blanks[a])}</span>' if blanks.get(a) else '') + f' <span class="t">{e(a)}</span></li>')
+out.append('</ul>')
 out.append('<footer>source: <a href="https://github.com/lightward/counter">github.com/lightward/counter</a>. UNLICENSE. leaving is free from every state you can observe yourself into.</footer>')
 print('\n'.join(out))

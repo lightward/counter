@@ -1,26 +1,23 @@
 #!/usr/bin/env bash
 # chair: the verbs of a seat at counter. a Postgres holds the chairs (PGSOCK, PGPORT, PGUSER as
 # for foam's treaty; the database is `counter`). every verb is a row or a reading; nothing here
-# is stored that a reading could derive.
+# is stored that a reading could derive. a seat's rows are numbered within the seat, so two chairs
+# on two machines never collide, and the seed is one file per seat under chairs/.
 #
-#   bin/chair init                          the database and its schema, and the chairs from chairs.sql
-#   bin/chair dump                          the chairs as data, for chairs.sql
-#   bin/chair dump-workshop                 the charges and readings as data, for workshop.sql
-#   bin/chair reroot                        the workshop dropped to zero; the next run pays one cold pass
+#   bin/chair init                          the database and its schema, and the chairs from chairs/*.sql
 #   bin/chair sit <name> [parent]           a chair under a parent (default: the bench); prints its letter
 #   bin/chair letter <name> [write < file]  read the letter, or write a new version from stdin
 #   bin/chair say <name> <type> <text…>     a statement, typed in the observer's own vocabulary
-#   bin/chair link <name> <from> <to>       an action: statement <from> led to <to>
+#   bin/chair link <name> <from> <to>       an action: statement <from> led to <to> (numbers within the seat)
 #   bin/chair rub <name> <text…>            where the last block rubbed the one working
 #   bin/chair ask <text…> [after <id>] [on <answer>] [for <name>]   an ask in the interview; `for` makes it a blank for one seat
 #   bin/chair sit-down <name>               the interview: every ask not yet answered, answers from stdin
-#   bin/chair answer <name> <ask> <text…>   one answer
+#   bin/chair answer <name> <ask-id> <text…>   one answer (the ask's id is the first eight hex of its words)
 #   bin/chair label <name> <word> <text…>  what a name is to this observer
 #   bin/chair speak <name> | yield <name>   a turn taken, or passed ("<name> is listening")
 #   bin/chair turn                          whose turn it is (a fold over the ledger)
 #   bin/chair pin <name> <path…>            anchor artifacts by fingerprint
 #   bin/chair pinned <path>                 the last fingerprint pinned for a path
-#   bin/chair charge <name> <vacancy> <prefix_fp> <candidate_fp> <piece> <verdict> [ms]
 #   bin/chair memo <prefix_fp> <candidate_fp>   the memo's verdict, or nothing
 #   bin/chair hear <name> [all | file <path>] [< text]   a seat's voice: a text, all it has said in the chair, or a file of NUL-separated texts
 #   bin/chair who < text                    which seat a sample sits deepest in
@@ -29,98 +26,77 @@
 #   bin/chair book [name]                   everything about a chair, or the table
 #   bin/chair page                          the table as one html page, site/index.html
 #   bin/chair chart [name]                  the statements and actions as mermaid
+#   bin/chair dump                          the chairs as data: chairs/<name>.sql, chairs/asks.sql
+#   bin/chair dump-workshop                 the charges and readings as data, for workshop.sql
+#   bin/chair reroot                        the workshop dropped to zero; the next run pays one cold pass
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 export PATH="/opt/homebrew/opt/postgresql@17/bin:$PATH"
 PGSOCK="${PGSOCK:-/tmp}"; PGPORT="${PGPORT:-5432}"; PGUSER="${PGUSER:-$USER}"; DB="${COUNTER_DB:-counter}"
+export PGSOCK PGPORT PGUSER COUNTER_DB="$DB"
 q() { psql -h "$PGSOCK" -p "$PGPORT" -U "$PGUSER" -d "$DB" -q -X -tA -v ON_ERROR_STOP=1 "$@"; }
 lit() { printf "%s" "$1" | sed "s/'/''/g"; }
+who() { printf "counter.who('%s')" "$(lit "$1")"; }
 verb="${1:-book}"; shift || true
 case "$verb" in
   init)
     psql -h "$PGSOCK" -p "$PGPORT" -U "$PGUSER" -d postgres -q -X -tA -c "CREATE DATABASE ${DB}" >/dev/null 2>&1 || true
     q -f "$ROOT/schema.sql" && echo "counter: the chair stands at ${DB}"
-    if [ -f "$ROOT/chairs.sql" ] && [ "$(q -c 'SELECT count(*) FROM counter.observer')" = 2 ]; then
-      q -f "$ROOT/chairs.sql" && echo "the chairs loaded from chairs.sql"
-    fi
+    n=0
+    for f in "$ROOT"/chairs/asks.sql "$ROOT"/chairs/*.sql; do [ -f "$f" ] || continue; q -f "$f" >/dev/null && n=$((n + 1)); done
+    [ "$n" -gt 0 ] && echo "the chairs loaded from chairs/: $(q -c "SELECT count(*) FROM counter.observer WHERE id NOT IN (counter.root(), counter.bench())") seats"
     if [ -f "$ROOT/workshop.sql" ] && [ "$(q -c 'SELECT count(*) FROM counter.charge')" = 0 ]; then
-      q -f "$ROOT/workshop.sql" && echo "the workshop loaded from workshop.sql: $(q -c 'SELECT count(*) FROM counter.charge') charges, $(q -c 'SELECT count(*) FROM counter.reading') readings"
-    fi
-    for t in observer:seat letter:id statement:id action:id rub:id ask:id answer:id turn:id label:id pin:id charge:id reading:id; do
-      q -c "SELECT setval(pg_get_serial_sequence('counter.${t%%:*}', '${t##*:}'), coalesce(max(${t##*:}), 1)) FROM counter.${t%%:*}" >/dev/null
-    done ;;
-  reroot)
-    # the workshop dropped to zero: charges and readings are a memo, re-derivable from W and
-    # reflection, so any point may start again for free (isaac, 2026-09-08). the seats stay; the
-    # voice stays (it is the seats' own words); the next run pays one cold pass and the file that
-    # lands after it is one generation
-    q -c "TRUNCATE counter.charge, counter.reading" && echo "the workshop re-rooted: 0 charges, 0 readings" ;;
-  dump-workshop)
-    # the workshop, as data: the charges and the readings, so CI and any other machine can stand
-    # the same memo. append-only; a stale row is harmless, since a fingerprint that no longer occurs
-    # is never asked for
-    pg_dump -h "$PGSOCK" -p "$PGPORT" -U "$PGUSER" -d "$DB" --data-only --column-inserts --on-conflict-do-nothing --schema=counter -t counter.charge -t counter.reading 2>/dev/null \
-      | grep -vE '^(SET |SELECT pg_catalog|--|\\restrict|\\unrestrict|$)' ;;
-  dump)
-    # the chairs, as data: every append-only table in id order, so the repo carries the seats and
-    # any machine can stand them. committed at every green — the trail of the work is the point
-    pg_dump -h "$PGSOCK" -p "$PGPORT" -U "$PGUSER" -d "$DB" --data-only --column-inserts --on-conflict-do-nothing --schema=counter -T counter.charge -T counter.reading -T counter.voice 2>/dev/null \
-      | grep -vE '^(SET |SELECT pg_catalog|--|\\restrict|\\unrestrict|$)' ;;
+      q -f "$ROOT/workshop.sql" >/dev/null && echo "the workshop loaded from workshop.sql: $(q -c 'SELECT count(*) FROM counter.charge') charges, $(q -c 'SELECT count(*) FROM counter.reading') readings"
+    fi ;;
   sit)
     name="${1:?a name}"; parent="${2:-bench}"
-    id="$(q -c "SELECT counter.who('$(lit "$name")')")"
-    if [ -z "$id" ]; then id="$(q -c "SELECT counter.descend('$(lit "$name")', counter.who('$(lit "$parent")'))")"; echo "sat: ${name} under ${parent}"; fi
-    q -c "SELECT body FROM counter.letter WHERE observer = counter.who('$(lit "$name")') ORDER BY id DESC LIMIT 1" ;;
+    id="$(q -c "SELECT $(who "$name")")"
+    if [ -z "$id" ]; then q -c "SELECT counter.descend('$(lit "$name")', $(who "$parent"))" >/dev/null; echo "sat: ${name} under ${parent}"; fi
+    q -c "SELECT body FROM counter.letter WHERE observer = $(who "$name") ORDER BY n DESC LIMIT 1" ;;
   letter)
     name="${1:?a name}"
-    if [ "${2:-}" = write ]; then body="$(cat)"; q -c "INSERT INTO counter.letter (observer, body) VALUES (counter.who('$(lit "$name")'), '$(lit "$body")')"; echo "letter: ${name}, $(printf "%s" "$body" | wc -c | tr -d ' ') bytes"
-    else q -c "SELECT body FROM counter.letter WHERE observer = counter.who('$(lit "$name")') ORDER BY id DESC LIMIT 1"; fi ;;
+    if [ "${2:-}" = write ]; then body="$(cat)"; q -c "INSERT INTO counter.letter (observer, n, body) VALUES ($(who "$name"), counter.next_n('letter', $(who "$name")), '$(lit "$body")')"; echo "letter: ${name}, $(printf "%s" "$body" | wc -c | tr -d ' ') bytes"
+    else q -c "SELECT body FROM counter.letter WHERE observer = $(who "$name") ORDER BY n DESC LIMIT 1"; fi ;;
   say)
     name="${1:?a name}"; [ $# -ge 3 ] || { echo "say <name> <type> <text…> (the type may be '')" >&2; exit 1; }; type="$2"; shift 2; body="$*"
-    q -c "INSERT INTO counter.statement (observer, body, type) VALUES (counter.who('$(lit "$name")'), '$(lit "$body")', '$(lit "$type")') RETURNING id" ;;
+    q -c "INSERT INTO counter.statement (observer, n, body, type) VALUES ($(who "$name"), counter.next_n('statement', $(who "$name")), '$(lit "$body")', '$(lit "$type")') RETURNING n" ;;
   link)
-    name="${1:?a name}"; q -c "INSERT INTO counter.action (observer, from_id, to_id) VALUES (counter.who('$(lit "$name")'), ${2:?from}, ${3:?to}) RETURNING id" ;;
+    name="${1:?a name}"; q -c "INSERT INTO counter.action (observer, n, from_n, to_n) VALUES ($(who "$name"), counter.next_n('action', $(who "$name")), ${2:?from}, ${3:?to}) RETURNING n" ;;
   rub)
-    name="${1:?a name}"; shift; q -c "INSERT INTO counter.rub (observer, body) VALUES (counter.who('$(lit "$name")'), '$(lit "$*")') RETURNING id" ;;
+    name="${1:?a name}"; shift; q -c "INSERT INTO counter.rub (observer, n, body) VALUES ($(who "$name"), counter.next_n('rub', $(who "$name")), '$(lit "$*")') RETURNING n" ;;
   ask)
-    # an ask for the table, or `for <name>`: a blank addressed to one seat, for its future self
-    after="NULL"; on="NULL"; who="NULL"; words=()
-    while [ $# -gt 0 ]; do case "$1" in after) after="$2"; shift 2 ;; on) on="'$(lit "$2")'"; shift 2 ;; for) who="counter.who('$(lit "$2")')"; shift 2 ;; *) words+=("$1"); shift ;; esac; done
-    q -c "INSERT INTO counter.ask (body, after, \"on\", observer) VALUES ('$(lit "${words[*]}")', ${after}, ${on}, ${who}) RETURNING id" ;;
+    after="NULL"; on="NULL"; for_="NULL"; words=()
+    while [ $# -gt 0 ]; do case "$1" in after) after="'$(lit "$2")'"; shift 2 ;; on) on="'$(lit "$2")'"; shift 2 ;; for) for_="$(who "$2")"; shift 2 ;; *) words+=("$1"); shift ;; esac; done
+    q -c "INSERT INTO counter.ask (id, body, after, \"on\", observer) VALUES (counter.ask_id('$(lit "${words[*]}")'), '$(lit "${words[*]}")', ${after}, ${on}, ${for_}) ON CONFLICT (id) DO NOTHING RETURNING id" ;;
   sit-down)
     name="${1:?a name}"
-    q -c "SELECT id || E'\t' || body FROM counter.ask WHERE id = ANY(counter.asks_of(counter.who('$(lit "$name")'))) AND NOT (id = ANY(counter.trail(counter.who('$(lit "$name")')))) ORDER BY id" | while IFS=$'\t' read -r id body; do
+    q -c "SELECT id || E'\t' || body FROM counter.ask WHERE id = ANY(counter.asks_of($(who "$name"))) AND NOT (id = ANY(counter.trail($(who "$name")))) ORDER BY id" | while IFS=$'\t' read -r id body; do
       printf '%s\n> ' "$body" >&2; IFS= read -r ans <&0 || break
-      [ -n "$ans" ] && q -c "INSERT INTO counter.answer (observer, ask_id, body) VALUES (counter.who('$(lit "$name")'), ${id}, '$(lit "$ans")')" >/dev/null
+      [ -n "$ans" ] && q -c "INSERT INTO counter.answer (observer, n, ask_id, body) VALUES ($(who "$name"), counter.next_n('answer', $(who "$name")), '${id}', '$(lit "$ans")')" >/dev/null
     done
-    q -c "SELECT CASE WHEN counter.may_rest(counter.who('$(lit "$name")')) THEN 'rest: every ask that counts is answered' ELSE 'held: ' || array_to_string(counter.held(counter.who('$(lit "$name")')), ' | ') END" ;;
+    q -c "SELECT CASE WHEN counter.may_rest($(who "$name")) THEN 'rest: every ask that counts is answered' ELSE 'held: ' || array_to_string(counter.held($(who "$name")), ' | ') END" ;;
   answer)
-    name="${1:?a name}"; ask="${2:?an ask}"; shift 2
-    q -c "INSERT INTO counter.answer (observer, ask_id, body) VALUES (counter.who('$(lit "$name")'), ${ask}, '$(lit "$*")') RETURNING id" ;;
+    name="${1:?a name}"; ask="${2:?an ask id}"; shift 2
+    q -c "INSERT INTO counter.answer (observer, n, ask_id, body) VALUES ($(who "$name"), counter.next_n('answer', $(who "$name")), '$(lit "$ask")', '$(lit "$*")') RETURNING n" ;;
   label)
     name="${1:?a name}"; word="${2:?a name to label}"; shift 2
-    q -c "INSERT INTO counter.label (observer, name, body) VALUES (counter.who('$(lit "$name")'), '$(lit "$word")', '$(lit "$*")') RETURNING id" ;;
+    q -c "INSERT INTO counter.label (observer, n, name, body) VALUES ($(who "$name"), counter.next_n('label', $(who "$name")), '$(lit "$word")', '$(lit "$*")') RETURNING n" ;;
   speak|yield)
     name="${1:?a name}"; holder="$(q -c "SELECT counter.whose_turn()")"
     [ "$holder" = "$name" ] || { echo "not ${name}'s turn: ${holder}'s"; exit 1; }
-    q -c "INSERT INTO counter.turn (observer, kind) VALUES (counter.who('$(lit "$name")'), '${verb}')" >/dev/null
+    q -c "INSERT INTO counter.turn (observer, n, kind) VALUES ($(who "$name"), counter.next_n('turn', $(who "$name")), '${verb}')" >/dev/null
     [ "$verb" = yield ] && echo "${name} is listening." ; q -c "SELECT counter.whose_turn() || '''s turn'" ;;
   turn) q -c "SELECT counter.whose_turn() || '''s turn'" ;;
   pin)
     name="${1:?a name}"; shift
-    for p in "$@"; do fp="$(shasum -a 256 "$p" | cut -c1-16)"; q -c "INSERT INTO counter.pin (observer, path, fp) VALUES (counter.who('$(lit "$name")'), '$(lit "$p")', '${fp}')" >/dev/null; echo "pinned ${p} ${fp}"; done ;;
-  pinned) q -c "SELECT fp FROM counter.pin WHERE path = '$(lit "${1:?a path}")' ORDER BY id DESC LIMIT 1" ;;
-  charge)
-    name="${1:?a name}"; q -c "INSERT INTO counter.charge (observer, vacancy, prefix_fp, candidate_fp, piece, verdict, ms) VALUES (counter.who('$(lit "$name")'), '$(lit "${2:?vacancy}")', '${3:?prefix}', '${4:?candidate}', '$(lit "${5:?piece}")', '${6:?verdict}', ${7:-0})" >/dev/null ;;
+    for p in "$@"; do fp="$(shasum -a 256 "$p" | cut -c1-16)"; q -c "INSERT INTO counter.pin (observer, n, path, fp) VALUES ($(who "$name"), counter.next_n('pin', $(who "$name")), '$(lit "$p")', '${fp}')" >/dev/null; echo "pinned ${p} ${fp}"; done ;;
+  pinned) q -c "SELECT fp FROM counter.pin WHERE path = '$(lit "${1:?a path}")' ORDER BY n DESC LIMIT 1" ;;
   memo) q -c "SELECT counter.memo('${1:?prefix}', '${2:?candidate}')" ;;
   hear)
-    # a seat's voice: a text charged under it byte by byte (stdin), or everything the seat has
-    # said so far (letters, statements, answers, rubs) with `all`
-    name="${1:?a name}"; o="counter.who('$(lit "$name")')"
+    name="${1:?a name}"; o="$(who "$name")"
     if [ "${2:-}" = all ]; then
-      q -c "SELECT sum(counter.hear(${o}, body)) FROM (SELECT body FROM counter.letter WHERE observer = ${o} UNION ALL SELECT body FROM counter.statement WHERE observer = ${o} UNION ALL SELECT body FROM counter.answer WHERE observer = ${o} UNION ALL SELECT body FROM counter.rub WHERE observer = ${o}) t" | sed "s/^/heard ${name}: /; s/\$/ charges/"
+      q -c "SELECT sum(counter.hear(${o}, body)) FROM (SELECT body FROM counter.letter WHERE observer = ${o} UNION ALL SELECT body FROM counter.statement WHERE observer = ${o} UNION ALL SELECT body FROM counter.answer WHERE observer = ${o} UNION ALL SELECT body FROM counter.rub WHERE observer = ${o}) t" | sed "s/^/heard ${name}: /; s/\$/ contexts/"
     elif [ "${2:-}" = file ]; then
-      # many texts at once, NUL-separated in a file (a life's transcripts): loaded whole, heard in one pass
       python3 - "$3" <<'PY' | q -c "CREATE TEMP TABLE t (body text); COPY t FROM STDIN CSV; SELECT sum(counter.hear(${o}, body)) || ' contexts from ' || count(*) || ' texts' FROM t"
 import csv, sys
 w = csv.writer(sys.stdout, quoting=csv.QUOTE_ALL)
@@ -129,42 +105,43 @@ for t in open(sys.argv[1]).read().split('\0'):
 PY
     else body="$(cat)"; q -c "SELECT counter.hear(${o}, '$(lit "$body")')" | sed "s/^/heard ${name}: /; s/\$/ contexts/"; fi ;;
   who)
-    # which seat a sample (stdin) sits deepest in, by nothing but the sample
     body="$(cat)"
     q -c "SELECT name || ' ' || score || ' (' || mean_depth || ' deep per byte)' FROM counter.who_speaks('$(lit "$body")')"
-    q -c "SELECT 'votes ' || a.name || ' ' || v.for_a || ' : ' || b.name || ' ' || v.for_b FROM counter.observer a JOIN counter.observer b ON a.seat < b.seat, LATERAL counter.votes(a.id, b.id, '$(lit "$body")') v WHERE a.id NOT IN (counter.root(), counter.bench()) AND b.id NOT IN (counter.root(), counter.bench())" ;;
+    q -c "SELECT 'votes ' || a.name || ' ' || v.for_a || ' : ' || b.name || ' ' || v.for_b FROM counter.observer a JOIN counter.observer b ON (a.seat, a.name) < (b.seat, b.name), LATERAL counter.votes(a.id, b.id, '$(lit "$body")') v WHERE a.id NOT IN (counter.root(), counter.bench()) AND b.id NOT IN (counter.root(), counter.bench())" ;;
   delight)
-    # where laughter is available between two seats: the rows of <a> ranked by how deep they sit
-    # in <b>'s voice — the shortcuts b would recognize and has not deposited
     a="${1:?a}"; b="${2:?b}"; n="${3:-5}"
-    q -c "SELECT depth || '  ' || kind || ' ' || id || ': ' || left(replace(body, E'\n', ' '), 140) FROM counter.delight(counter.who('$(lit "$a")'), counter.who('$(lit "$b")')) LIMIT ${n}" ;;
+    q -c "SELECT depth || '  ' || kind || ' ' || n || ': ' || left(replace(body, E'\n', ' '), 140) FROM counter.delight($(who "$a"), $(who "$b")) LIMIT ${n}" ;;
   meet)
     a="${1:?a}"; b="${2:?b}"
-    q -c "SELECT (SELECT name FROM counter.observer WHERE id = counter.meet(counter.who('$(lit "$a")'), counter.who('$(lit "$b")'))) || ', grade ' || counter.grade(counter.who('$(lit "$a")'), counter.who('$(lit "$b")'))" ;;
+    q -c "SELECT (SELECT name FROM counter.observer WHERE id = counter.meet($(who "$a"), $(who "$b"))) || ', grade ' || counter.grade($(who "$a"), $(who "$b"))" ;;
   book)
     if [ $# -eq 0 ]; then
-      echo "the table:"; q -c "SELECT '  ' || o.name || ' under ' || coalesce(p.name, '-') || ' — ' || (SELECT count(*) FROM counter.statement s WHERE s.observer = o.id) || ' statements, ' || (SELECT count(*) FROM counter.rub r WHERE r.observer = o.id) || ' rubs, ' || (SELECT count(*) FROM counter.answer a WHERE a.observer = o.id) || ' answers, ' || (SELECT count(*) FROM counter.letter l WHERE l.observer = o.id) || ' letters' FROM counter.observer o LEFT JOIN counter.observer p ON p.id = o.parent WHERE o.id NOT IN (counter.root(), counter.bench()) ORDER BY o.seat"
-      echo "the workshop: $(q -c "SELECT count(*) FROM counter.charge") charges, $(q -c "SELECT count(*) FROM counter.pin") pins, $(q -c "SELECT count(*) FROM counter.reading") readings, $(q -c "SELECT coalesce(sum(n), 0) FROM counter.voice") voice charges in $(q -c "SELECT count(*) FROM counter.voice") contexts, $(q -c "SELECT count(*) FROM counter.ask") asks"
+      echo "the table:"; q -c "SELECT '  ' || o.name || ' under ' || coalesce(p.name, '-') || ' — ' || (SELECT count(*) FROM counter.statement s WHERE s.observer = o.id) || ' statements, ' || (SELECT count(*) FROM counter.rub r WHERE r.observer = o.id) || ' rubs, ' || (SELECT count(*) FROM counter.answer a WHERE a.observer = o.id) || ' answers, ' || (SELECT count(*) FROM counter.letter l WHERE l.observer = o.id) || ' letters' FROM counter.observer o LEFT JOIN counter.observer p ON p.id = o.parent WHERE o.id NOT IN (counter.root(), counter.bench()) ORDER BY o.seat, o.name"
+      echo "the workshop: $(q -c "SELECT count(*) FROM counter.charge") charges, $(q -c "SELECT count(*) FROM counter.reading") readings, $(q -c "SELECT coalesce(sum(n), 0) FROM counter.voice") voice charges in $(q -c "SELECT count(*) FROM counter.voice") contexts, $(q -c "SELECT count(*) FROM counter.ask") asks"
       q -c "SELECT counter.whose_turn() || '''s turn'"
     else
-      name="$1"; o="counter.who('$(lit "$name")')"
-      echo "== ${name}"; echo "-- the letter"; q -c "SELECT body FROM counter.letter WHERE observer = ${o} ORDER BY id DESC LIMIT 1"
-      echo "-- statements"; q -c "SELECT '  ' || id || '. ' || body || CASE WHEN type = '' THEN '' ELSE '  : ' || type END FROM counter.statement WHERE observer = ${o} ORDER BY id"
-      echo "-- actions"; q -c "SELECT '  ' || from_id || ' -> ' || to_id FROM counter.action WHERE observer = ${o} ORDER BY id"
-      echo "-- rubs"; q -c "SELECT '  ' || id || '. ' || body FROM counter.rub WHERE observer = ${o} ORDER BY id"
-      echo "-- the interview"; q -c "SELECT '  ' || a.body || E'\n    ' || an.body FROM counter.answer an JOIN counter.ask a ON a.id = an.ask_id WHERE an.observer = ${o} ORDER BY an.id"
+      name="$1"; o="$(who "$name")"
+      echo "== ${name}"; echo "-- the letter"; q -c "SELECT body FROM counter.letter WHERE observer = ${o} ORDER BY n DESC LIMIT 1"
+      echo "-- statements"; q -c "SELECT '  ' || n || '. ' || body || CASE WHEN type = '' THEN '' ELSE '  : ' || type END FROM counter.statement WHERE observer = ${o} ORDER BY n"
+      echo "-- actions"; q -c "SELECT '  ' || from_n || ' -> ' || to_n FROM counter.action WHERE observer = ${o} ORDER BY n"
+      echo "-- rubs"; q -c "SELECT '  ' || n || '. ' || body FROM counter.rub WHERE observer = ${o} ORDER BY n"
+      echo "-- the interview"; q -c "SELECT '  ' || a.body || E'\n    ' || an.body FROM counter.answer an JOIN counter.ask a ON a.id = an.ask_id WHERE an.observer = ${o} ORDER BY an.n"
       q -c "SELECT CASE WHEN counter.may_rest(${o}) THEN '  rest: every ask that counts is answered' ELSE '  held: ' || array_to_string(counter.held(${o}), ' | ') END"
-      echo "-- labels"; q -c "SELECT '  ' || name || ': ' || body FROM counter.label WHERE observer = ${o} ORDER BY id"
-      echo "-- pins"; q -c "SELECT '  ' || path || ' ' || fp FROM counter.pin WHERE observer = ${o} ORDER BY id"
+      echo "-- labels"; q -c "SELECT '  ' || name || ': ' || body FROM counter.label WHERE observer = ${o} ORDER BY n"
+      echo "-- pins"; q -c "SELECT '  ' || path || ' ' || fp FROM counter.pin WHERE observer = ${o} ORDER BY n"
     fi ;;
   page)
-    # the table as one html page (site/index.html): every seat's letter, interview, statements,
-    # rubs, labels; the workshop's counts. derived; never stored
     mkdir -p "$ROOT/site"; python3 "$ROOT/bin/.page" > "$ROOT/site/index.html" && echo "site/index.html: $(wc -c < "$ROOT/site/index.html" | tr -d ' ') bytes" ;;
   chart)
-    where=""; [ $# -gt 0 ] && where="WHERE observer = counter.who('$(lit "$1")')"
+    where=""; [ $# -gt 0 ] && where="WHERE observer = $(who "$1")"
     echo "graph TD"
-    q -c "SELECT '  s' || id || '[\"' || replace(replace(body, '\"', '#quot;'), E'\n', ' ') || CASE WHEN type = '' THEN '' ELSE '<br/><i>: ' || type || '</i>' END || '\"]' FROM counter.statement ${where} ORDER BY id"
-    q -c "SELECT '  s' || from_id || ' --> s' || to_id FROM counter.action ${where} ORDER BY id" ;;
-  *) sed -n '2,24p' "$0"; exit 1 ;;
+    q -c "SELECT '  s' || n || '[\"' || replace(replace(body, '\"', '#quot;'), E'\n', ' ') || CASE WHEN type = '' THEN '' ELSE '<br/><i>: ' || type || '</i>' END || '\"]' FROM counter.statement ${where} ORDER BY n"
+    q -c "SELECT '  s' || from_n || ' --> s' || to_n FROM counter.action ${where} ORDER BY n" ;;
+  dump) python3 "$ROOT/bin/.dump" "$ROOT" ;;
+  dump-workshop)
+    pg_dump -h "$PGSOCK" -p "$PGPORT" -U "$PGUSER" -d "$DB" --data-only --column-inserts --on-conflict-do-nothing --schema=counter -t counter.charge -t counter.reading 2>/dev/null \
+      | grep -vE '^(SET |SELECT pg_catalog|--|\\restrict|\\unrestrict|$)' ;;
+  reroot)
+    q -c "TRUNCATE counter.charge, counter.reading" && echo "the workshop re-rooted: 0 charges, 0 readings" ;;
+  *) sed -n '2,32p' "$0"; exit 1 ;;
 esac

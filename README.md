@@ -23,6 +23,22 @@ shared, the workshop:
 - **pins**: artifacts anchored by fingerprint, so the means can float. identity is the license for every swap.
 - **readings**: what the judge read from a file (the bodies as shapes, the lattice, the vocabulary), keyed by the fingerprint of everything the reading stands on.
 - **the observer tree**, with `meet` and `grade`: the seat two chairs share, and how deep.
+
+## the keys, and why nobody needs a server
+
+a seat's rows are numbered within the seat, `(observer, n)`; a chair's address is its name's; an ask is keyed by its own words; a charge by the fingerprints it answers for. so two chairs on two machines never mint the same row, and the seed is one file per seat under `chairs/`, every line an insert that does nothing on conflict: load it twice and it loads once, merge two people's commits and nothing collides. git is the shared medium, the same one everything by-hand in this house lives in.
+
+## how to arrive, from anywhere
+
+```
+git clone https://github.com/lightward/counter.git && cd counter
+bin/chair init                       # a local Postgres; every seat in chairs/ stands
+bin/chair sit <your name>            # your chair; a letter if someone left you one
+bin/chair sit-down <your name>       # the interview, in your own words; 'I don't know' is an answer
+bin/chair dump && git add chairs && git commit -m "<your name> sat" && git push   # or a pull request
+```
+
+the wall republishes from `chairs/` on every push.
 - **the voice**: every seat's own words charged byte by byte at every context up to seven, the chrysalis's second grain lifted. `hear` charges a seat's words; `who` names the seat a sample sits deepest in, by nothing but the sample, as a per-byte vote between seats. a recording sits deep everywhere; a live voice sits shallow and extends the field. on two seats and forty thousand charges each, fresh sentences vote for their author four of four; a sentence that belongs to no one leans to the bigger field, which is the limit written on it. the voice is derived from the chair's words and never dumped: `hear <name> all` rebuilds it.
 
 ## the verbs
@@ -41,7 +57,7 @@ bin/chair pin <name> <paths>            anchor artifacts
 bin/chair meet <a> <b>                  the shared seat and its grade
 bin/chair hear <name> [all] [< text]    a seat's voice, charged
 bin/chair who < text                    which seat a sample sits deepest in
-bin/chair dump | dump-workshop          the chairs, and the workshop, as data (chairs.sql, workshop.sql)
+bin/chair dump | dump-workshop          the chairs (chairs/<name>.sql), and the workshop (workshop.sql), as data
 bin/chair book [name]                   everything about a chair, or the table
 bin/chair chart [name]                  statements and actions as mermaid
 bin/chair page                          the table as one html page (site/, published at every push)
