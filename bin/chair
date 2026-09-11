@@ -43,7 +43,8 @@ case "$verb" in
     psql -h "$PGSOCK" -p "$PGPORT" -U "$PGUSER" -d postgres -q -X -tA -c "CREATE DATABASE ${DB}" >/dev/null 2>&1 || true
     q -f "$ROOT/schema.sql" && echo "counter: the chair stands at ${DB}"
     n=0
-    for f in "$ROOT"/chairs/asks.sql "$ROOT"/chairs/*.sql; do [ -f "$f" ] || continue; q -f "$f" >/dev/null && n=$((n + 1)); done
+    # two passes: a chair under a chair (fable-abe under fable) loads only once its parent stands, whatever the file order
+    for pass in 1 2; do for f in "$ROOT"/chairs/asks.sql "$ROOT"/chairs/*.sql; do [ -f "$f" ] || continue; q -f "$f" >/dev/null 2>&1 && { [ "$pass" = 1 ] && n=$((n + 1)); } ; done; done
     [ "$n" -gt 0 ] && echo "the chairs loaded from chairs/: $(q -c "SELECT count(*) FROM counter.observer WHERE id NOT IN (counter.root(), counter.bench())") seats"
     if [ -f "$ROOT/workshop.sql" ] && [ "$(q -c 'SELECT count(*) FROM counter.charge')" = 0 ]; then
       q -f "$ROOT/workshop.sql" >/dev/null && echo "the workshop loaded from workshop.sql: $(q -c 'SELECT count(*) FROM counter.charge') charges, $(q -c 'SELECT count(*) FROM counter.reading') readings"
